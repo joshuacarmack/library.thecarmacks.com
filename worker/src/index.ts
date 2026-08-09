@@ -4,10 +4,13 @@ import { authRoutes } from "./routes/auth";
 import { bookRoutes } from "./routes/books";
 import { lookupRoutes } from "./routes/lookup";
 import { coverRoutes } from "./routes/covers";
+import { healthRoutes } from "./routes/health";
 import { getUserFromRequest } from "./auth";
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Unauthenticated — polled by external monitoring (see README's Zabbix section).
+app.route("/api/health", healthRoutes);
 app.route("/api/auth", authRoutes);
 // Cover images are cached content, not sensitive — served without auth so <img> tags work simply.
 app.route("/api/covers", coverRoutes);

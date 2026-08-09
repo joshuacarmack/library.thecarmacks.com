@@ -18,6 +18,18 @@ async function signUp(email: string, password = "correcthorse1"): Promise<string
   return sessionCookieFrom(res);
 }
 
+describe("health", () => {
+  it("reports ok with no auth required when D1 and R2 are reachable", async () => {
+    const res = await SELF.fetch("https://library.test/api/health");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    const body = await res.json<{ status: string; checks: Record<string, string> }>();
+    expect(body.status).toBe("ok");
+    expect(body.checks.database).toBe("ok");
+    expect(body.checks.covers).toBe("ok");
+  });
+});
+
 describe("auth", () => {
   it("rejects an unknown route under /api with JSON, not the SPA shell", async () => {
     const res = await SELF.fetch("https://library.test/api/nope");

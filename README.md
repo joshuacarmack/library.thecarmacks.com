@@ -88,6 +88,46 @@ normalization/checksum validation, plus integration tests that hit the real Hono
 (`SELF.fetch`) end to end: auth gating, signup/login/logout, book CRUD, and duplicate-ISBN
 handling. `npm run typecheck` covers the rest.
 
+## Monitoring (Zabbix)
+
+`GET /api/health` is an unauthenticated liveness/readiness check — no cookie, no session:
+
+```bash
+curl https://library.thecarmacks.com/api/health
+```
+
+```json
+{"status":"ok","checks":{"database":"ok","covers":"ok"},"environment":"production","timestamp":"..."}
+```
+
+It returns `200` only if D1 and R2 are both actually reachable (not just that the Worker itself
+responds — a Worker can be "up" while its dependencies aren't), and `503` with the failing check(s)
+named otherwise. `Cache-Control: no-store` so nothing between Zabbix and the Worker caches a stale
+result.
+
+Cloudflare Workers can't run a Zabbix agent, so poll this from the Zabbix server side as an
+**HTTP agent** item (Data collection → Hosts → your host → Items → Create item):
+
+| Field | Value |
+|---|---|
+| Type | HTTP agent |
+| Key | `library.health` (or any unique key) |
+| URL | `https://library.thecarmacks.com/api/health` |
+| Request type | GET |
+| Type of information | Text |
+| Update interval | `1m` (a personal-use app doesn't need tighter than this) |
+
+Then add a trigger on that item, e.g.:
+
+```
+find(/YourHost/library.health,,"regexp","\"status\":\"ok\"")=0
+```
+
+...or simpler, a second HTTP agent item with **Type of information: Numeric (unsigned)** reading
+the HTTP status code directly, with a trigger firing when it's not `200`. Either approach also
+naturally alerts on total unreachability (DNS failure, TLS error, timeout), since those show up as
+an item read failure in Zabbix regardless of which check method you use.
+
 ## Deploy
 
 ```bash
