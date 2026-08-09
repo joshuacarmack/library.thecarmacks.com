@@ -35,6 +35,7 @@ export interface DuplicateInfo {
 
 export interface WishlistItem {
   id: string;
+  wishlist_id: string;
   isbn: string | null;
   title: string;
   authors: string[];
@@ -42,6 +43,15 @@ export interface WishlistItem {
   notes: string | null;
   source: string | null;
   added_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Wishlist {
+  id: string;
+  name: string;
+  item_count: number;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,9 +125,16 @@ export const api = {
     request<{ book: Book }>(`/books/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteBook: (id: string) => request<{ ok: true }>(`/books/${id}`, { method: "DELETE" }),
 
-  listWishlist: (q?: string) => {
-    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    return request<{ items: WishlistItem[] }>(`/wishlist${qs}`);
+  listWishlists: () => request<{ wishlists: Wishlist[] }>("/wishlists"),
+  createWishlist: (name: string) =>
+    request<{ wishlist: Wishlist }>("/wishlists", { method: "POST", body: JSON.stringify({ name }) }),
+  renameWishlist: (id: string, name: string) =>
+    request<{ wishlist: Wishlist }>(`/wishlists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  deleteWishlist: (id: string) => request<{ ok: true }>(`/wishlists/${id}`, { method: "DELETE" }),
+
+  listWishlist: (wishlistId: string, q?: string) => {
+    const params = new URLSearchParams({ wishlistId, ...(q ? { q } : {}) });
+    return request<{ items: WishlistItem[] }>(`/wishlist?${params.toString()}`);
   },
   /** 409 (already owned, or already on the wishlist) is a normal outcome here, not an error. */
   addToWishlist: async (

@@ -331,6 +331,25 @@ a {
   flex-wrap: wrap;
 }
 
+.wishlist-tabs {
+  margin-bottom: 4px;
+}
+.wishlist-tabs__new-form {
+  display: inline-flex;
+}
+.wishlist-manage {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.wishlist-card__move {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: inherit;
+}
 .wishlist-card__notes {
   font-size: 12px;
   color: var(--color-muted);

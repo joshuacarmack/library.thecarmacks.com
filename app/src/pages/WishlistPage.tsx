@@ -1,12 +1,19 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, type DuplicateInfo, type LookupResult, type WishlistItem } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, type DuplicateInfo, type LookupResult, type Wishlist, type WishlistItem } from "../api";
 
 type AddMode = "closed" | "search" | "results" | "form";
 
 export function WishlistPage() {
+  const [params, setParams] = useSearchParams();
+  const [lists, setLists] = useState<Wishlist[]>([]);
+  const [listsLoading, setListsLoading] = useState(true);
+  const [newListName, setNewListName] = useState<string | null>(null); // non-null while the "new list" input is open
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
   const [items, setItems] = useState<WishlistItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [itemsLoading, setItemsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -18,17 +25,40 @@ export function WishlistPage() {
   const [duplicate, setDuplicate] = useState<DuplicateInfo | null>(null);
   const [form, setForm] = useState({ isbn: "", title: "", authors: "", coverSourceUrl: "", notes: "" });
 
-  function refresh() {
-    setLoading(true);
+  const activeListId = params.get("list");
+  const activeList = lists.find((l) => l.id === activeListId) ?? null;
+
+  function refreshLists() {
+    setListsLoading(true);
     return api
-      .listWishlist()
+      .listWishlists()
+      .then((res) => {
+        setLists(res.wishlists);
+        // If nothing (valid) is selected yet, default to the first list.
+        if (!res.wishlists.some((l) => l.id === activeListId)) {
+          if (res.wishlists[0]) setParams({ list: res.wishlists[0].id }, { replace: true });
+          else setParams({}, { replace: true });
+        }
+      })
+      .finally(() => setListsLoading(false));
+  }
+
+  function refreshItems(listId: string) {
+    setItemsLoading(true);
+    return api
+      .listWishlist(listId)
       .then((res) => setItems(res.items))
-      .finally(() => setLoading(false));
+      .finally(() => setItemsLoading(false));
   }
 
   useEffect(() => {
-    refresh();
+    refreshLists();
   }, []);
+
+  useEffect(() => {
+    if (activeListId) refreshItems(activeListId);
+    else setItems([]);
+  }, [activeListId]);
 
   function resetAddFlow() {
     setAddMode("closed");
@@ -37,6 +67,42 @@ export function WishlistPage() {
     setAlreadyOwned(null);
     setDuplicate(null);
     setForm({ isbn: "", title: "", authors: "", coverSourceUrl: "", notes: "" });
+  }
+
+  async function handleCreateList(e: FormEvent) {
+    e.preventDefault();
+    const name = newListName?.trim();
+    if (!name) return;
+    setError(null);
+    try {
+      const res = await api.createWishlist(name);
+      setNewListName(null);
+      await refreshLists();
+      setParams({ list: res.wishlist.id });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create list.");
+    }
+  }
+
+  async function handleRename(e: FormEvent) {
+    e.preventDefault();
+    if (!activeList || !renameValue.trim()) return;
+    setError(null);
+    try {
+      await api.renameWishlist(activeList.id, renameValue.trim());
+      setRenaming(false);
+      await refreshLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not rename list.");
+    }
+  }
+
+  async function handleDeleteList() {
+    if (!activeList) return;
+    if (!confirm(`Delete "${activeList.name}" and everything on it? This can't be undone.`)) return;
+    await api.deleteWishlist(activeList.id);
+    setParams({}, { replace: true });
+    await refreshLists();
   }
 
   async function handleSearch(e: FormEvent) {
@@ -68,10 +134,11 @@ export function WishlistPage() {
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) return;
+    if (!form.title.trim() || !activeListId) return;
     setError(null);
     try {
       const res = await api.addToWishlist({
+        wishlistId: activeListId,
         isbn: form.isbn || null,
         title: form.title,
         authors: form.authors.split(",").map((a) => a.trim()).filter(Boolean),
@@ -88,23 +155,22 @@ export function WishlistPage() {
         return;
       }
       resetAddFlow();
-      await refresh();
+      await Promise.all([refreshItems(activeListId), refreshLists()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add to wishlist.");
     }
   }
 
   async function handleConvert(item: WishlistItem) {
+    if (!activeListId) return;
     setBusyId(item.id);
     setError(null);
     try {
       const res = await api.convertWishlistItem(item.id);
       if (res.alreadyOwned) {
         setError(`"${item.title}" turned out to already be in the library.`);
-        await refresh();
-        return;
       }
-      await refresh();
+      await Promise.all([refreshItems(activeListId), refreshLists()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not move this to the library.");
     } finally {
@@ -113,11 +179,23 @@ export function WishlistPage() {
   }
 
   async function handleRemove(item: WishlistItem) {
+    if (!activeListId) return;
     if (!confirm(`Remove "${item.title}" from the wishlist?`)) return;
     setBusyId(item.id);
     try {
       await api.removeFromWishlist(item.id);
-      await refresh();
+      await Promise.all([refreshItems(activeListId), refreshLists()]);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleMove(item: WishlistItem, targetListId: string) {
+    if (!activeListId || targetListId === item.wishlist_id) return;
+    setBusyId(item.id);
+    try {
+      await api.updateWishlistItem(item.id, { wishlistId: targetListId });
+      await Promise.all([refreshItems(activeListId), refreshLists()]);
     } finally {
       setBusyId(null);
     }
@@ -129,17 +207,82 @@ export function WishlistPage() {
         <div>
           <h1>Wishlist</h1>
           <p className="library-header__subtitle">
-            {items.length} book{items.length === 1 ? "" : "s"} she wants
+            {activeList ? `${activeList.item_count} book${activeList.item_count === 1 ? "" : "s"}` : "No list selected"}
           </p>
         </div>
-        <button className="btn btn--primary btn--sm" onClick={() => setAddMode("search")}>
-          + Add
-        </button>
+        {activeList && (
+          <button className="btn btn--primary btn--sm" onClick={() => setAddMode("search")}>
+            + Add
+          </button>
+        )}
       </header>
 
       {error && <p className="form-error">{error}</p>}
 
-      {addMode !== "closed" && (
+      {!listsLoading && (
+        <div className="library-tags wishlist-tabs">
+          {lists.map((l) => (
+            <button
+              key={l.id}
+              className={"tag-chip" + (l.id === activeListId ? " tag-chip--active" : "")}
+              onClick={() => setParams({ list: l.id })}
+            >
+              {l.name} ({l.item_count})
+            </button>
+          ))}
+          {newListName === null ? (
+            <button className="tag-chip" onClick={() => setNewListName("")}>
+              + New list
+            </button>
+          ) : (
+            <form className="tag-input-row wishlist-tabs__new-form" onSubmit={handleCreateList}>
+              <input
+                autoFocus
+                placeholder="List name…"
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                onBlur={() => !newListName && setNewListName(null)}
+              />
+              <button type="submit" className="btn btn--ghost btn--sm">
+                Add
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {activeList && (
+        <div className="wishlist-manage">
+          {!renaming ? (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => {
+                  setRenameValue(activeList.name);
+                  setRenaming(true);
+                }}
+              >
+                Rename list
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={handleDeleteList}>
+                Delete list
+              </button>
+            </>
+          ) : (
+            <form className="tag-input-row" onSubmit={handleRename}>
+              <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
+              <button type="submit" className="btn btn--ghost btn--sm">
+                Save
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setRenaming(false)}>
+                Cancel
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {addMode !== "closed" && activeListId && (
         <div className="confirm-card">
           {alreadyOwned && (
             <>
@@ -158,7 +301,7 @@ export function WishlistPage() {
 
           {!alreadyOwned && duplicate && (
             <>
-              <h2>Already on the wishlist</h2>
+              <h2>Already on this list</h2>
               <p>"{duplicate.title}" is already there.</p>
               <button className="btn btn--ghost" onClick={resetAddFlow}>
                 Cancel
@@ -250,11 +393,20 @@ export function WishlistPage() {
         </div>
       )}
 
-      {loading ? (
+      {listsLoading ? (
+        <p className="centered-loading">Loading…</p>
+      ) : lists.length === 0 ? (
+        <div className="empty-state">
+          <p>No wishlists yet.</p>
+          <button className="btn btn--primary" onClick={() => setNewListName("")}>
+            Create your first list
+          </button>
+        </div>
+      ) : itemsLoading ? (
         <p className="centered-loading">Loading…</p>
       ) : items.length === 0 ? (
         <div className="empty-state">
-          <p>Nothing on the wishlist yet.</p>
+          <p>Nothing on "{activeList?.name}" yet.</p>
           <button className="btn btn--primary" onClick={() => setAddMode("search")}>
             Add the first one
           </button>
@@ -282,6 +434,21 @@ export function WishlistPage() {
                   >
                     Got it — add to library
                   </button>
+                  {lists.length > 1 && (
+                    <select
+                      className="wishlist-card__move"
+                      value={item.wishlist_id}
+                      disabled={busyId === item.id}
+                      onChange={(e) => handleMove(item, e.target.value)}
+                      aria-label="Move to another list"
+                    >
+                      {lists.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.id === item.wishlist_id ? l.name : `Move to ${l.name}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     className="btn btn--ghost btn--sm"
                     disabled={busyId === item.id}

@@ -8,6 +8,7 @@ export const wishlistRoutes = new Hono<{ Bindings: Env }>();
 
 interface WishlistRow {
   id: string;
+  wishlist_id: string;
   isbn: string | null;
   title: string;
   authors: string | null;
@@ -26,23 +27,33 @@ function rowToItem(row: WishlistRow): WishlistItem {
   };
 }
 
+async function wishlistExists(env: Env, wishlistId: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT id FROM wishlists WHERE id = ?").bind(wishlistId).first();
+  return !!row;
+}
+
 wishlistRoutes.get("/", async (c) => {
+  const wishlistId = c.req.query("wishlistId");
   const q = c.req.query("q");
-  const clauses: string[] = [];
-  const params: unknown[] = [];
+  if (!wishlistId) return c.json({ error: "Query parameter 'wishlistId' is required." }, 400);
+
+  const clauses = ["wishlist_id = ?"];
+  const params: unknown[] = [wishlistId];
   if (q) {
     clauses.push("(title LIKE ? OR authors LIKE ? OR isbn LIKE ?)");
     const like = `%${q}%`;
     params.push(like, like, like);
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  const { results } = await c.env.DB.prepare(`SELECT * FROM wishlist_items ${where} ORDER BY created_at DESC`)
+  const { results } = await c.env.DB.prepare(
+    `SELECT * FROM wishlist_items WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC`
+  )
     .bind(...params)
     .all<WishlistRow>();
   return c.json({ items: results.map(rowToItem) });
 });
 
-interface CreateWishlistBody {
+interface CreateWishlistItemBody {
+  wishlistId: string;
   isbn?: string | null;
   title: string;
   authors?: string[];
@@ -52,9 +63,15 @@ interface CreateWishlistBody {
 }
 
 wishlistRoutes.post("/", async (c) => {
-  const body = await c.req.json<CreateWishlistBody>();
+  const body = await c.req.json<CreateWishlistItemBody>();
   if (!body.title?.trim()) {
     return c.json({ error: "Title is required." }, 400);
+  }
+  if (!body.wishlistId) {
+    return c.json({ error: "wishlistId is required." }, 400);
+  }
+  if (!(await wishlistExists(c.env, body.wishlistId))) {
+    return c.json({ error: "That wishlist doesn't exist." }, 404);
   }
 
   const isbn = body.isbn?.trim() || null;
@@ -67,8 +84,12 @@ wishlistRoutes.post("/", async (c) => {
     if (owned) {
       return c.json({ alreadyOwned: owned }, 409);
     }
-    const existing = await c.env.DB.prepare("SELECT id, title, cover_url FROM wishlist_items WHERE isbn = ?")
-      .bind(isbn)
+    // Scoped to the same list — the same book can reasonably appear on two
+    // different named lists (e.g. a birthday list and a book-club list).
+    const existing = await c.env.DB.prepare(
+      "SELECT id, title, cover_url FROM wishlist_items WHERE isbn = ? AND wishlist_id = ?"
+    )
+      .bind(isbn, body.wishlistId)
       .first<{ id: string; title: string; cover_url: string | null }>();
     if (existing) {
       return c.json({ duplicate: existing }, 409);
@@ -85,11 +106,12 @@ wishlistRoutes.post("/", async (c) => {
 
   const now = new Date().toISOString();
   await c.env.DB.prepare(
-    `INSERT INTO wishlist_items (id, isbn, title, authors, cover_url, notes, source, added_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO wishlist_items (id, wishlist_id, isbn, title, authors, cover_url, notes, source, added_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
+      body.wishlistId,
       isbn,
       body.title.trim(),
       JSON.stringify(body.authors ?? []),
@@ -108,7 +130,7 @@ wishlistRoutes.post("/", async (c) => {
 
 wishlistRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json<Partial<CreateWishlistBody>>();
+  const body = await c.req.json<Partial<CreateWishlistItemBody>>();
 
   const existing = await c.env.DB.prepare("SELECT * FROM wishlist_items WHERE id = ?").bind(id).first<WishlistRow>();
   if (!existing) return c.json({ error: "Wishlist item not found." }, 404);
@@ -130,6 +152,14 @@ wishlistRoutes.patch("/:id", async (c) => {
   if (body.notes !== undefined) {
     sets.push("notes = ?");
     params.push(body.notes || null);
+  }
+  if (body.wishlistId !== undefined) {
+    // Moving an item to a different list.
+    if (!(await wishlistExists(c.env, body.wishlistId))) {
+      return c.json({ error: "That wishlist doesn't exist." }, 404);
+    }
+    sets.push("wishlist_id = ?");
+    params.push(body.wishlistId);
   }
 
   if (!sets.length) return c.json({ item: rowToItem(existing) });

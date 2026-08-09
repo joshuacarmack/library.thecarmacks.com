@@ -33,6 +33,7 @@ export interface BookRecord {
 
 export interface WishlistItem {
   id: string;
+  wishlist_id: string;
   isbn: string | null;
   title: string;
   authors: string[];
@@ -40,6 +41,15 @@ export interface WishlistItem {
   notes: string | null;
   source: string | null;
   added_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Wishlist {
+  id: string;
+  name: string;
+  item_count: number;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }

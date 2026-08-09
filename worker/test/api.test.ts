@@ -166,29 +166,123 @@ describe("books API", () => {
   });
 });
 
-describe("wishlist API", () => {
+/** Creates a named wishlist and returns its id. */
+async function createWishlist(cookie: string, name: string): Promise<string> {
+  const res = await SELF.fetch("https://library.test/api/wishlists", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ name }),
+  });
+  expect(res.status).toBe(201);
+  const { wishlist } = await res.json<{ wishlist: { id: string } }>();
+  return wishlist.id;
+}
+
+describe("wishlists API (the named lists themselves)", () => {
   let cookie: string;
 
   beforeEach(async () => {
-    cookie = await signUp(`wishlist-${crypto.randomUUID()}@example.com`);
+    cookie = await signUp(`wishlists-${crypto.randomUUID()}@example.com`);
   });
 
   it("requires authentication", async () => {
-    const res = await SELF.fetch("https://library.test/api/wishlist");
+    const res = await SELF.fetch("https://library.test/api/wishlists");
     expect(res.status).toBe(401);
+  });
+
+  it("creates, lists (with item counts), renames, and deletes a wishlist", async () => {
+    const id = await createWishlist(cookie, `Birthday ideas ${crypto.randomUUID()}`);
+
+    await SELF.fetch("https://library.test/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ wishlistId: id, title: "Some Book" }),
+    });
+
+    const list = await SELF.fetch("https://library.test/api/wishlists", { headers: { Cookie: cookie } });
+    const { wishlists } = await list.json<{ wishlists: Array<{ id: string; item_count: number }> }>();
+    const found = wishlists.find((w) => w.id === id);
+    expect(found?.item_count).toBe(1);
+
+    const rename = await SELF.fetch(`https://library.test/api/wishlists/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "Renamed List" }),
+    });
+    expect(rename.status).toBe(200);
+    const { wishlist: renamed } = await rename.json<{ wishlist: { name: string } }>();
+    expect(renamed.name).toBe("Renamed List");
+
+    const del = await SELF.fetch(`https://library.test/api/wishlists/${id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie },
+    });
+    expect(del.status).toBe(200);
+
+    // Deleting a list deletes its items too.
+    const itemsAfter = await SELF.fetch(`https://library.test/api/wishlist?wishlistId=${id}`, {
+      headers: { Cookie: cookie },
+    });
+    const { items } = await itemsAfter.json<{ items: unknown[] }>();
+    expect(items).toHaveLength(0);
+  });
+
+  it("rejects a duplicate list name (case-insensitive)", async () => {
+    const name = `Book club ${crypto.randomUUID()}`;
+    await createWishlist(cookie, name);
+    const second = await SELF.fetch("https://library.test/api/wishlists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: name.toUpperCase() }),
+    });
+    expect(second.status).toBe(409);
+  });
+});
+
+describe("wishlist items API", () => {
+  let cookie: string;
+  let wishlistId: string;
+
+  beforeEach(async () => {
+    cookie = await signUp(`wishlist-${crypto.randomUUID()}@example.com`);
+    wishlistId = await createWishlist(cookie, `Someday ${crypto.randomUUID()}`);
+  });
+
+  it("requires authentication", async () => {
+    const res = await SELF.fetch(`https://library.test/api/wishlist?wishlistId=${wishlistId}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("requires a wishlistId to list or create items", async () => {
+    const list = await SELF.fetch("https://library.test/api/wishlist", { headers: { Cookie: cookie } });
+    expect(list.status).toBe(400);
+
+    const create = await SELF.fetch("https://library.test/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "No list specified" }),
+    });
+    expect(create.status).toBe(400);
   });
 
   it("adds, lists, updates, and removes a wishlist item", async () => {
     const create = await SELF.fetch("https://library.test/api/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Tomorrow, and Tomorrow, and Tomorrow", authors: ["Gabrielle Zevin"] }),
+      body: JSON.stringify({
+        wishlistId,
+        title: "Tomorrow, and Tomorrow, and Tomorrow",
+        authors: ["Gabrielle Zevin"],
+      }),
     });
     expect(create.status).toBe(201);
-    const { item } = await create.json<{ item: { id: string; authors: string[] } }>();
+    const { item } = await create.json<{ item: { id: string; wishlist_id: string; authors: string[] } }>();
     expect(item.authors).toEqual(["Gabrielle Zevin"]);
+    expect(item.wishlist_id).toBe(wishlistId);
 
-    const list = await SELF.fetch("https://library.test/api/wishlist", { headers: { Cookie: cookie } });
+    const list = await SELF.fetch(`https://library.test/api/wishlist?wishlistId=${wishlistId}`, {
+      headers: { Cookie: cookie },
+    });
     const { items } = await list.json<{ items: unknown[] }>();
     expect(items).toHaveLength(1);
 
@@ -207,28 +301,59 @@ describe("wishlist API", () => {
     });
     expect(del.status).toBe(200);
 
-    const listAfterDelete = await SELF.fetch("https://library.test/api/wishlist", { headers: { Cookie: cookie } });
+    const listAfterDelete = await SELF.fetch(`https://library.test/api/wishlist?wishlistId=${wishlistId}`, {
+      headers: { Cookie: cookie },
+    });
     const { items: itemsAfterDelete } = await listAfterDelete.json<{ items: unknown[] }>();
     expect(itemsAfterDelete).toHaveLength(0);
   });
 
-  it("flags an ISBN already on the wishlist as a duplicate, not a second entry", async () => {
+  it("moves an item to a different list via PATCH", async () => {
+    const otherListId = await createWishlist(cookie, `Book club ${crypto.randomUUID()}`);
+
+    const create = await SELF.fetch("https://library.test/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ wishlistId, title: "Movable Book" }),
+    });
+    const { item } = await create.json<{ item: { id: string } }>();
+
+    const move = await SELF.fetch(`https://library.test/api/wishlist/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ wishlistId: otherListId }),
+    });
+    expect(move.status).toBe(200);
+    const { item: moved } = await move.json<{ item: { wishlist_id: string } }>();
+    expect(moved.wishlist_id).toBe(otherListId);
+  });
+
+  it("allows the same ISBN on two different lists, but not twice on the same list", async () => {
     const isbn = "9780316556347";
+    const otherListId = await createWishlist(cookie, `Book club ${crypto.randomUUID()}`);
+
     const first = await SELF.fetch("https://library.test/api/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Project Hail Mary", isbn }),
+      body: JSON.stringify({ wishlistId, title: "Project Hail Mary", isbn }),
     });
     expect(first.status).toBe(201);
 
-    const second = await SELF.fetch("https://library.test/api/wishlist", {
+    const sameListAgain = await SELF.fetch("https://library.test/api/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Project Hail Mary", isbn }),
+      body: JSON.stringify({ wishlistId, title: "Project Hail Mary", isbn }),
     });
-    expect(second.status).toBe(409);
-    const body = await second.json<{ duplicate: { title: string } }>();
+    expect(sameListAgain.status).toBe(409);
+    const body = await sameListAgain.json<{ duplicate: { title: string } }>();
     expect(body.duplicate.title).toBe("Project Hail Mary");
+
+    const otherList = await SELF.fetch("https://library.test/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ wishlistId: otherListId, title: "Project Hail Mary", isbn }),
+    });
+    expect(otherList.status).toBe(201);
   });
 
   it("refuses to wishlist an ISBN that's already owned", async () => {
@@ -243,7 +368,7 @@ describe("wishlist API", () => {
     const wish = await SELF.fetch("https://library.test/api/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Project Hail Mary", isbn }),
+      body: JSON.stringify({ wishlistId, title: "Project Hail Mary", isbn }),
     });
     expect(wish.status).toBe(409);
     const body = await wish.json<{ alreadyOwned: { title: string } }>();
@@ -254,7 +379,12 @@ describe("wishlist API", () => {
     const create = await SELF.fetch("https://library.test/api/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Klara and the Sun", authors: ["Kazuo Ishiguro"], notes: "she mentioned this" }),
+      body: JSON.stringify({
+        wishlistId,
+        title: "Klara and the Sun",
+        authors: ["Kazuo Ishiguro"],
+        notes: "she mentioned this",
+      }),
     });
     const { item } = await create.json<{ item: { id: string } }>();
 
@@ -272,7 +402,9 @@ describe("wishlist API", () => {
     expect(book.notes).toBe("she mentioned this");
 
     // Gone from the wishlist...
-    const list = await SELF.fetch("https://library.test/api/wishlist", { headers: { Cookie: cookie } });
+    const list = await SELF.fetch(`https://library.test/api/wishlist?wishlistId=${wishlistId}`, {
+      headers: { Cookie: cookie },
+    });
     const { items } = await list.json<{ items: Array<{ id: string }> }>();
     expect(items.some((i) => i.id === item.id)).toBe(false);
 
