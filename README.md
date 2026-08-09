@@ -41,6 +41,19 @@ npx wrangler secret put SIGNUP_CODE
 If set, the signup form requires that code. Once both accounts exist, you can leave it set (or
 remove the `/signup` route entirely) since there's no invite/admin flow beyond that.
 
+The unauthenticated Google Books endpoint shares a small **global** quota across every caller on
+the internet — in testing it was already exhausted (`429 rateLimitExceeded`) before this app made
+a single request, meaning the app was quietly falling back to Open Library for everything. Get a
+free key from the [Google Cloud Console](https://console.cloud.google.com/apis/library/books.googleapis.com)
+(enable the "Books API", create an API key) and set it to fix this:
+
+```bash
+npx wrangler secret put GOOGLE_BOOKS_API_KEY
+```
+
+Lookups work without it (Open Library fallback covers most ISBNs), but cover art and metadata
+quality are noticeably better from Google Books when it's reachable.
+
 ## Local development
 
 ```bash
@@ -80,8 +93,10 @@ app/
 
 ## Notes / known follow-ups
 
-- App icons are a placeholder SVG (`app/public/icons/icon.svg`). iOS requires a real PNG for the
-  home-screen icon — swap in before caring about the iOS "add to home screen" experience.
+- App icons (`app/public/icons/icon-192.png`, `icon-512.png`) are programmatically generated
+  placeholders (`scripts/generate-icons.mjs` — regenerate with `node scripts/generate-icons.mjs`
+  after editing `icon.svg`). Functional for PWA install on iOS/Android, but swap in real branded
+  artwork whenever you get around to it.
 - The `/signup` page is open by default; gate it with `SIGNUP_CODE` (see above) since this is a
   public URL with only two intended users.
 - Duplicate-ISBN handling, manual-entry fallback, and the desktop bulk-add "needs review" queue are

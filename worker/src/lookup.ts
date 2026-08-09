@@ -18,8 +18,13 @@ interface OpenLibraryIsbnResponse {
   covers?: number[];
 }
 
-async function googleBooksByIsbn(isbn: string): Promise<LookupResult | null> {
-  const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+function googleBooksUrl(query: string, apiKey?: string, extra = ""): string {
+  const key = apiKey ? `&key=${encodeURIComponent(apiKey)}` : "";
+  return `https://www.googleapis.com/books/v1/volumes?q=${query}${extra}${key}`;
+}
+
+async function googleBooksByIsbn(isbn: string, apiKey?: string): Promise<LookupResult | null> {
+  const res = await fetch(googleBooksUrl(`isbn:${encodeURIComponent(isbn)}`, apiKey));
   if (!res.ok) return null;
   const data = (await res.json()) as GoogleBooksResponse;
   const info = data.items?.[0]?.volumeInfo;
@@ -34,8 +39,8 @@ async function googleBooksByIsbn(isbn: string): Promise<LookupResult | null> {
   };
 }
 
-async function googleBooksByText(query: string): Promise<LookupResult[]> {
-  const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`);
+async function googleBooksByText(query: string, apiKey?: string): Promise<LookupResult[]> {
+  const res = await fetch(googleBooksUrl(encodeURIComponent(query), apiKey, "&maxResults=10"));
   if (!res.ok) return [];
   const data = (await res.json()) as GoogleBooksResponse;
   return (data.items ?? [])
@@ -111,10 +116,15 @@ async function openLibraryByText(query: string): Promise<LookupResult[]> {
     }));
 }
 
-/** Look up a single book by ISBN: Google Books first, then Open Library. */
-export async function lookupByIsbn(isbn: string): Promise<LookupResult | null> {
+/**
+ * Look up a single book by ISBN: Google Books first, then Open Library.
+ * `googleApiKey` is optional — the unauthenticated Google Books endpoint shares a low
+ * global quota across all callers and gets exhausted easily, so set GOOGLE_BOOKS_API_KEY
+ * in production if lookups start silently falling back to Open Library more than expected.
+ */
+export async function lookupByIsbn(isbn: string, googleApiKey?: string): Promise<LookupResult | null> {
   try {
-    const fromGoogle = await googleBooksByIsbn(isbn);
+    const fromGoogle = await googleBooksByIsbn(isbn, googleApiKey);
     if (fromGoogle) return fromGoogle;
   } catch {
     // fall through to Open Library
@@ -127,9 +137,9 @@ export async function lookupByIsbn(isbn: string): Promise<LookupResult | null> {
 }
 
 /** Text search fallback (title/author), same provider order. */
-export async function lookupByText(query: string): Promise<LookupResult[]> {
+export async function lookupByText(query: string, googleApiKey?: string): Promise<LookupResult[]> {
   try {
-    const fromGoogle = await googleBooksByText(query);
+    const fromGoogle = await googleBooksByText(query, googleApiKey);
     if (fromGoogle.length) return fromGoogle;
   } catch {
     // fall through to Open Library

@@ -3,6 +3,9 @@ export interface Env {
   COVERS: R2Bucket;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
+  SIGNUP_CODE?: string;
+  /** Optional — raises the Google Books lookup quota above the shared unauthenticated limit. */
+  GOOGLE_BOOKS_API_KEY?: string;
 }
 
 export type BookStatus = "to_read" | "reading" | "read";

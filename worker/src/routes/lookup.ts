@@ -12,7 +12,7 @@ lookupRoutes.get("/isbn/:isbn", async (c) => {
     .bind(isbn)
     .first<{ id: string; title: string; cover_url: string | null }>();
 
-  const result = await lookupByIsbn(isbn);
+  const result = await lookupByIsbn(isbn, c.env.GOOGLE_BOOKS_API_KEY);
 
   return c.json({
     found: !!result,
@@ -24,6 +24,6 @@ lookupRoutes.get("/isbn/:isbn", async (c) => {
 lookupRoutes.get("/search", async (c) => {
   const q = c.req.query("q")?.trim();
   if (!q) return c.json({ error: "Query parameter 'q' is required." }, 400);
-  const results = await lookupByText(q);
+  const results = await lookupByText(q, c.env.GOOGLE_BOOKS_API_KEY);
   return c.json({ results });
 });

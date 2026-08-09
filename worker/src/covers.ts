@@ -7,15 +7,22 @@ import type { Env } from "./types";
 export async function cacheCoverImage(env: Env, sourceUrl: string, bookId: string): Promise<string | null> {
   try {
     const res = await fetch(sourceUrl);
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) {
+      console.error(`cacheCoverImage: fetch failed for ${sourceUrl} (status ${res.status})`);
+      return null;
+    }
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const ext = contentType.includes("png") ? "png" : "jpg";
     const key = `covers/${bookId}.${ext}`;
-    await env.COVERS.put(key, res.body, {
+    // Buffer fully rather than streaming res.body straight through — Miniflare's local R2
+    // simulator (and some edge cases with redirected fetch bodies) can hang on a piped stream.
+    const bytes = await res.arrayBuffer();
+    await env.COVERS.put(key, bytes, {
       httpMetadata: { contentType },
     });
     return `/api/covers/${key.replace("covers/", "")}`;
-  } catch {
+  } catch (err) {
+    console.error(`cacheCoverImage: error caching ${sourceUrl}`, err);
     return null;
   }
 }

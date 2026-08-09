@@ -23,7 +23,7 @@ authRoutes.post("/signup", async (c) => {
     return c.json({ error: "Email and a password of at least 8 characters are required." }, 400);
   }
 
-  const requiredCode = (c.env as unknown as { SIGNUP_CODE?: string }).SIGNUP_CODE;
+  const requiredCode = c.env.SIGNUP_CODE;
   if (requiredCode && body.signupCode !== requiredCode) {
     return c.json({ error: "Invalid signup code." }, 403);
   }
