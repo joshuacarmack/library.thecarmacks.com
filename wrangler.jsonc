@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "library-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "191f07d7-81a4-4b2c-a638-5bbad7539964",
       "migrations_dir": "worker/migrations"
     }
   ],
