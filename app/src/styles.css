@@ -49,6 +49,30 @@ a {
   min-height: 100vh;
 }
 
+.offline-banner {
+  background: var(--color-accent);
+  color: white;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+}
+
+.error-boundary {
+  max-width: 420px;
+  margin: 15vh auto 0;
+  padding: 0 20px;
+  text-align: center;
+}
+.error-boundary h1 {
+  font-size: 20px;
+}
+.error-boundary p {
+  color: var(--color-muted);
+  margin-bottom: 20px;
+}
+
 .app-main {
   flex: 1;
   max-width: 640px;

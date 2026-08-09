@@ -54,6 +54,17 @@ npx wrangler secret put GOOGLE_BOOKS_API_KEY
 Lookups work without it (Open Library fallback covers most ISBNs), but cover art and metadata
 quality are noticeably better from Google Books when it's reachable.
 
+Once migrations are applied and the app is running (`npm run dev` or deployed), create the two
+accounts:
+
+```bash
+node scripts/seed-accounts.mjs                                # local dev, http://127.0.0.1:8787
+node scripts/seed-accounts.mjs https://library.thecarmacks.com # production
+```
+
+Prompts for each name/email/password interactively (password input is masked in a real terminal).
+Set `SIGNUP_CODE` in the environment first if you set that secret above.
+
 ## Local development
 
 ```bash
@@ -71,9 +82,11 @@ run `wrangler dev` separately first.
 npm test
 ```
 
-Runs the Worker unit tests (`worker/test/`) inside the actual Workers runtime via
-`@cloudflare/vitest-pool-workers` — currently covers password hashing/verification and ISBN
-normalization + checksum validation. `npm run typecheck` covers the rest.
+Runs the Worker tests (`worker/test/`) inside the actual Workers runtime via
+`@cloudflare/vitest-pool-workers` — unit tests for password hashing/verification and ISBN
+normalization/checksum validation, plus integration tests that hit the real Hono app
+(`SELF.fetch`) end to end: auth gating, signup/login/logout, book CRUD, and duplicate-ISBN
+handling. `npm run typecheck` covers the rest.
 
 ## Deploy
 
@@ -92,13 +105,19 @@ worker/
     auth.ts         # PBKDF2 password hashing + D1-backed sessions
     lookup.ts        # Google Books -> Open Library ISBN/text lookup
     covers.ts         # Fetch-and-cache cover images into R2
+    isbn.ts            # ISBN normalization + checksum validation
     routes/           # auth, books, lookup, covers endpoints
   migrations/         # D1 schema
+  test/               # vitest (unit + SELF.fetch integration tests)
 app/
   src/
     pages/            # Login, Library, BookDetail, ScanAdd, ManualAdd, BulkAdd
-    components/        # AppShell/bottom nav, BookCard, StarRating, BarcodeScanner
+    components/        # AppShell/bottom nav, BookCard, StarRating, BarcodeScanner, ErrorBoundary
+    hooks/              # useOnlineStatus
     api.ts             # Typed fetch client for the Worker API
+scripts/
+  generate-icons.mjs   # Regenerates the PWA PNG icons
+  seed-accounts.mjs     # Creates the two accounts against a running instance
 ```
 
 ## Notes / known follow-ups
