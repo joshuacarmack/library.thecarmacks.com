@@ -4,7 +4,9 @@ import type { Env } from "./types";
 
 const SESSION_COOKIE = "library_session";
 const SESSION_TTL_DAYS = 30;
-const PBKDF2_ITERATIONS = 210_000;
+// Workers' WebCrypto implementation caps PBKDF2 at 100,000 iterations
+// (higher counts throw "iteration counts above 100000 are not supported").
+const PBKDF2_ITERATIONS = 100_000;
 
 function bytesToHex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
