@@ -170,4 +170,11 @@ scripts/
   public URL with only two intended users.
 - Duplicate-ISBN handling, manual-entry fallback, and the desktop bulk-add "needs review" queue are
   all implemented per spec — see `specs.md` for the intended UX if extending them.
-- Phase 2 (recommendations, wishlist) is intentionally out of scope here.
+- Wishlist (multiple named lists, "got it" conversion into the real library) is implemented — see
+  `worker/src/routes/wishlist.ts` / `wishlists.ts`. Recommendations are still out of scope.
+- The fixed genre (`GENRES`) and shelf location (`LOCATIONS`) lists are **duplicated** between
+  `app/src/constants.ts` and `worker/src/constants.ts` — there's no shared package between the
+  worker and app builds, and the worker copy is also used server-side to validate `shelfLocation`
+  on create/update. Editing one without the other is a real, already-hit bug: the option shows up
+  in the UI but every save gets rejected with a 400 until the worker copy catches up. Update both
+  files together when changing either list.
