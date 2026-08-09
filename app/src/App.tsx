@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { BookDetailPage } from "./pages/BookDetailPage";
+import { WishlistPage } from "./pages/WishlistPage";
 import { ManualAddPage } from "./pages/ManualAddPage";
 import { BulkAddPage } from "./pages/BulkAddPage";
 import { AppShell } from "./components/AppShell";
@@ -33,6 +34,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<LibraryPage />} />
                 <Route path="/books/:id" element={<BookDetailPage />} />
+                <Route path="/wishlist" element={<WishlistPage />} />
                 <Route
                   path="/add/scan"
                   element={

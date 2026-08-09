@@ -33,6 +33,19 @@ export interface DuplicateInfo {
   cover_url: string | null;
 }
 
+export interface WishlistItem {
+  id: string;
+  isbn: string | null;
+  title: string;
+  authors: string[];
+  cover_url: string | null;
+  notes: string | null;
+  source: string | null;
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -101,4 +114,43 @@ export const api = {
   updateBook: (id: string, payload: Record<string, unknown>) =>
     request<{ book: Book }>(`/books/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteBook: (id: string) => request<{ ok: true }>(`/books/${id}`, { method: "DELETE" }),
+
+  listWishlist: (q?: string) => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+    return request<{ items: WishlistItem[] }>(`/wishlist${qs}`);
+  },
+  /** 409 (already owned, or already on the wishlist) is a normal outcome here, not an error. */
+  addToWishlist: async (
+    payload: Record<string, unknown>
+  ): Promise<
+    | { item: WishlistItem; alreadyOwned?: undefined; duplicate?: undefined }
+    | { item?: undefined; alreadyOwned: DuplicateInfo; duplicate?: undefined }
+    | { item?: undefined; alreadyOwned?: undefined; duplicate: DuplicateInfo }
+  > => {
+    const res = await fetch("/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok && res.status !== 409) {
+      throw new ApiError((data as { error?: string })?.error ?? res.statusText, res.status);
+    }
+    return data;
+  },
+  updateWishlistItem: (id: string, payload: Record<string, unknown>) =>
+    request<{ item: WishlistItem }>(`/wishlist/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  removeFromWishlist: (id: string) => request<{ ok: true }>(`/wishlist/${id}`, { method: "DELETE" }),
+  /** 409 (already owned) is a normal outcome here, not an error. */
+  convertWishlistItem: async (
+    id: string
+  ): Promise<{ book: Book; alreadyOwned?: undefined } | { book?: undefined; alreadyOwned: DuplicateInfo }> => {
+    const res = await fetch(`/api/wishlist/${id}/convert`, { method: "POST", credentials: "include" });
+    const data = await res.json();
+    if (!res.ok && res.status !== 409) {
+      throw new ApiError((data as { error?: string })?.error ?? res.statusText, res.status);
+    }
+    return data;
+  },
 };

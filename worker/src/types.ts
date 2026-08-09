@@ -31,6 +31,19 @@ export interface BookRecord {
   updated_at: string;
 }
 
+export interface WishlistItem {
+  id: string;
+  isbn: string | null;
+  title: string;
+  authors: string[];
+  cover_url: string | null;
+  notes: string | null;
+  source: string | null;
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LookupResult {
   isbn: string | null;
   title: string;

@@ -5,7 +5,7 @@ import { getUserFromRequest } from "../auth";
 
 export const bookRoutes = new Hono<{ Bindings: Env }>();
 
-interface BookRow {
+export interface BookRow {
   id: string;
   isbn: string | null;
   title: string;
@@ -26,7 +26,7 @@ interface BookRow {
   updated_at: string;
 }
 
-function rowToBook(row: BookRow): BookRecord {
+export function rowToBook(row: BookRow): BookRecord {
   return {
     ...row,
     authors: row.authors ? (JSON.parse(row.authors) as string[]) : [],

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./types";
 import { authRoutes } from "./routes/auth";
 import { bookRoutes } from "./routes/books";
+import { wishlistRoutes } from "./routes/wishlist";
 import { lookupRoutes } from "./routes/lookup";
 import { coverRoutes } from "./routes/covers";
 import { healthRoutes } from "./routes/health";
@@ -21,6 +22,11 @@ app.use("/api/books/*", async (c, next) => {
   if (!user) return c.json({ error: "Not authenticated." }, 401);
   await next();
 });
+app.use("/api/wishlist/*", async (c, next) => {
+  const user = await getUserFromRequest(c);
+  if (!user) return c.json({ error: "Not authenticated." }, 401);
+  await next();
+});
 app.use("/api/lookup/*", async (c, next) => {
   const user = await getUserFromRequest(c);
   if (!user) return c.json({ error: "Not authenticated." }, 401);
@@ -28,6 +34,7 @@ app.use("/api/lookup/*", async (c, next) => {
 });
 
 app.route("/api/books", bookRoutes);
+app.route("/api/wishlist", wishlistRoutes);
 app.route("/api/lookup", lookupRoutes);
 
 app.notFound((c) => {

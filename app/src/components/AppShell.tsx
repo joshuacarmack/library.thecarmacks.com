@@ -4,6 +4,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 
 const NAV_ITEMS = [
   { to: "/", label: "Library", icon: "📚" },
+  { to: "/wishlist", label: "Wishlist", icon: "⭐" },
   { to: "/add/scan", label: "Scan", icon: "📷" },
   { to: "/add/manual", label: "Add", icon: "➕" },
 ];
