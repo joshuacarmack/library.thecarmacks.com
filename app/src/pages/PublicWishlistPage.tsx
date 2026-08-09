@@ -59,6 +59,7 @@ export function PublicWishlistPage() {
                   <div className="book-card__info">
                     <div className="book-card__title">{item.title}</div>
                     <div className="book-card__author">{item.authors.join(", ") || "Unknown author"}</div>
+                    {item.isbn && <div className="wishlist-card__isbn">ISBN {item.isbn}</div>}
                     {item.notes && <div className="wishlist-card__notes">{item.notes}</div>}
                   </div>
                 </div>

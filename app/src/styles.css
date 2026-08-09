@@ -388,6 +388,11 @@ a {
   background: var(--color-surface);
   color: inherit;
 }
+.wishlist-card__isbn {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
 .wishlist-card__notes {
   font-size: 12px;
   color: var(--color-muted);
