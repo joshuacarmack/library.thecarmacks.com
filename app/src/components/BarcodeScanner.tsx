@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 
 interface BarcodeScannerProps {
   onDetected: (isbn: string) => void;
@@ -11,6 +12,11 @@ interface BarcodeScannerProps {
 function normalizeIsbn(raw: string): string {
   return raw.replace(/[^0-9Xx]/g, "").toUpperCase();
 }
+
+// Book barcodes are always EAN-13 (occasionally EAN-8 for small booklets). Restricting the
+// reader to these formats — instead of zxing's full default set — avoids stray hits on QR
+// codes or other barcode types someone might wave in front of the camera, and decodes faster.
+const HINTS = new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8]]]);
 
 export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -23,7 +29,7 @@ export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerPro
       return;
     }
 
-    const reader = new BrowserMultiFormatReader();
+    const reader = new BrowserMultiFormatReader(HINTS);
     let cancelled = false;
 
     reader

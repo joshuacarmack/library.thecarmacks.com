@@ -8,7 +8,7 @@ type Stage =
   | { name: "looking-up"; isbn: string }
   | { name: "confirm"; isbn: string; result: LookupResult }
   | { name: "duplicate"; isbn: string; result: LookupResult | null; duplicate: DuplicateInfo }
-  | { name: "not-found"; isbn: string }
+  | { name: "not-found"; isbn: string; validChecksum: boolean }
   | { name: "saving" };
 
 export function ScanAddPage() {
@@ -19,13 +19,13 @@ export function ScanAddPage() {
   const handleDetected = useCallback(async (isbn: string) => {
     setStage((prev) => (prev.name === "scanning" ? { name: "looking-up", isbn } : prev));
     try {
-      const { found, result, duplicate } = await api.lookupIsbn(isbn);
+      const { found, result, duplicate, validChecksum } = await api.lookupIsbn(isbn);
       if (duplicate) {
         setStage({ name: "duplicate", isbn, result, duplicate });
       } else if (found && result) {
         setStage({ name: "confirm", isbn, result });
       } else {
-        setStage({ name: "not-found", isbn });
+        setStage({ name: "not-found", isbn, validChecksum });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lookup failed.");
@@ -113,6 +113,12 @@ export function ScanAddPage() {
         <div className="confirm-card">
           <h2>No match found</h2>
           <p>ISBN {stage.isbn} didn't match Google Books or Open Library.</p>
+          {!stage.validChecksum && (
+            <p className="form-error">
+              That number doesn't check out as a valid ISBN — the barcode may have been misread. Worth a rescan
+              before entering it by hand.
+            </p>
+          )}
           <div className="confirm-actions">
             <Link to={`/add/manual?isbn=${encodeURIComponent(stage.isbn)}`} className="btn btn--primary">
               Enter manually

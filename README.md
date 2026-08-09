@@ -65,6 +65,16 @@ from the same local server (matches production routing). For frontend-only itera
 reload, run `npm run dev:app` in a second terminal (proxies `/api` to `wrangler dev` on :8787) —
 run `wrangler dev` separately first.
 
+## Tests
+
+```bash
+npm test
+```
+
+Runs the Worker unit tests (`worker/test/`) inside the actual Workers runtime via
+`@cloudflare/vitest-pool-workers` — currently covers password hashing/verification and ISBN
+normalization + checksum validation. `npm run typecheck` covers the rest.
+
 ## Deploy
 
 ```bash

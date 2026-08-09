@@ -72,7 +72,7 @@ export const api = {
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
 
   lookupIsbn: (isbn: string) =>
-    request<{ found: boolean; result: LookupResult | null; duplicate: DuplicateInfo | null }>(
+    request<{ found: boolean; result: LookupResult | null; duplicate: DuplicateInfo | null; validChecksum: boolean }>(
       `/lookup/isbn/${encodeURIComponent(isbn)}`
     ),
   searchText: (q: string) => request<{ results: LookupResult[] }>(`/lookup/search?q=${encodeURIComponent(q)}`),

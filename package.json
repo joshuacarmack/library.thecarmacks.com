@@ -10,9 +10,11 @@
     "deploy": "npm run build:app && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply library-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply library-db --remote",
-    "typecheck": "tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p app/tsconfig.json"
+    "typecheck": "tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p app/tsconfig.json",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.3",
     "@cloudflare/workers-types": "^5.20260801.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -20,6 +22,7 @@
     "typescript": "^5.7.3",
     "vite": "^6.0.7",
     "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^4.1.10",
     "wrangler": "^4.0.0"
   },
   "dependencies": {
