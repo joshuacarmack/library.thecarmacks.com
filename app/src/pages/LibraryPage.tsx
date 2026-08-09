@@ -24,6 +24,7 @@ export function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [shelf, setShelf] = useState("");
   const [sort, setSort] = useState("created_at");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
 
@@ -31,7 +32,7 @@ export function LibraryPage() {
     let cancelled = false;
     setLoading(true);
     api
-      .listBooks({ q, status, sort, dir })
+      .listBooks({ q, status, shelf, sort, dir })
       .then((res) => {
         if (!cancelled) setBooks(res.books);
       })
@@ -41,9 +42,14 @@ export function LibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [q, status, sort, dir]);
+  }, [q, status, shelf, sort, dir]);
 
   const allTags = useMemo(() => [...new Set(books.flatMap((b) => b.tags))].sort(), [books]);
+  const allShelves = useMemo(() => {
+    const shelves = new Set(books.map((b) => b.shelf_location).filter((s): s is string => !!s));
+    if (shelf) shelves.add(shelf); // keep the active filter selectable even once it narrows the list
+    return [...shelves].sort();
+  }, [books, shelf]);
 
   return (
     <div className="library-page">
@@ -76,6 +82,16 @@ export function LibraryPage() {
               </option>
             ))}
           </select>
+          {allShelves.length > 0 && (
+            <select value={shelf} onChange={(e) => setShelf(e.target.value)}>
+              <option value="">All locations</option>
+              {allShelves.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

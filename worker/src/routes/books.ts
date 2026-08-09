@@ -35,18 +35,18 @@ export function rowToBook(row: BookRow): BookRecord {
   };
 }
 
-const SORTABLE_COLUMNS = new Set(["title", "created_at", "rating", "status", "series_name"]);
+const SORTABLE_COLUMNS = new Set(["title", "created_at", "rating", "status", "series_name", "shelf_location"]);
 
 bookRoutes.get("/", async (c) => {
-  const { q, status, genre, tag, sort = "created_at", dir = "desc" } = c.req.query();
+  const { q, status, genre, tag, shelf, sort = "created_at", dir = "desc" } = c.req.query();
 
   const clauses: string[] = [];
   const params: unknown[] = [];
 
   if (q) {
-    clauses.push("(title LIKE ? OR authors LIKE ? OR isbn LIKE ?)");
+    clauses.push("(title LIKE ? OR authors LIKE ? OR isbn LIKE ? OR shelf_location LIKE ?)");
     const like = `%${q}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
   if (status) {
     clauses.push("status = ?");
@@ -59,6 +59,10 @@ bookRoutes.get("/", async (c) => {
   if (tag) {
     clauses.push("tags LIKE ?");
     params.push(`%"${tag}"%`);
+  }
+  if (shelf) {
+    clauses.push("shelf_location = ?");
+    params.push(shelf);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -90,6 +94,7 @@ interface CreateBookBody {
   seriesName?: string | null;
   seriesNumber?: number | null;
   notes?: string | null;
+  shelfLocation?: string | null;
   source?: string | null;
   allowDuplicate?: boolean;
 }
@@ -121,8 +126,8 @@ bookRoutes.post("/", async (c) => {
   const now = new Date().toISOString();
   await c.env.DB.prepare(
     `INSERT INTO books
-      (id, isbn, title, authors, cover_url, status, rating, genres, tags, series_name, series_number, notes, format, source, added_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'physical', ?, ?, ?, ?)`
+      (id, isbn, title, authors, cover_url, status, rating, genres, tags, series_name, series_number, notes, shelf_location, format, source, added_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'physical', ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -137,6 +142,7 @@ bookRoutes.post("/", async (c) => {
       body.seriesName ?? null,
       body.seriesNumber ?? null,
       body.notes ?? null,
+      body.shelfLocation ?? null,
       body.source ?? "manual",
       user?.id ?? null,
       now,
@@ -159,11 +165,13 @@ const UPDATABLE_FIELDS: Record<string, (v: unknown) => unknown> = {
   genres: (v) => JSON.stringify(v ?? []),
   tags: (v) => JSON.stringify(v ?? []),
   notes: (v) => v ?? null,
+  shelfLocation: (v) => v ?? null,
 };
 
 const FIELD_KEY_MAP: Record<string, string> = {
   seriesName: "series_name",
   seriesNumber: "series_number",
+  shelfLocation: "shelf_location",
 };
 
 bookRoutes.patch("/:id", async (c) => {

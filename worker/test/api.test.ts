@@ -164,6 +164,33 @@ describe("books API", () => {
     const { books } = await filtered.json<{ books: Array<{ title: string }> }>();
     expect(books.map((b) => b.title)).toEqual(["Apple Book", "Mango Book"]);
   });
+
+  it("sets shelf location on create, updates it via PATCH, and filters/searches by it", async () => {
+    const create = await SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "Shelved Book", shelfLocation: "Living room" }),
+    });
+    expect(create.status).toBe(201);
+    const { book } = await create.json<{ book: { id: string; shelf_location: string | null } }>();
+    expect(book.shelf_location).toBe("Living room");
+
+    const patch = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ shelfLocation: "Office" }),
+    });
+    const patched = await patch.json<{ book: { shelf_location: string | null } }>();
+    expect(patched.book.shelf_location).toBe("Office");
+
+    const byShelf = await SELF.fetch("https://library.test/api/books?shelf=Office", { headers: { Cookie: cookie } });
+    const { books: shelfMatches } = await byShelf.json<{ books: Array<{ id: string }> }>();
+    expect(shelfMatches.some((b) => b.id === book.id)).toBe(true);
+
+    const bySearch = await SELF.fetch("https://library.test/api/books?q=Office", { headers: { Cookie: cookie } });
+    const { books: searchMatches } = await bySearch.json<{ books: Array<{ id: string }> }>();
+    expect(searchMatches.some((b) => b.id === book.id)).toBe(true);
+  });
 });
 
 /** Creates a named wishlist and returns its id. */

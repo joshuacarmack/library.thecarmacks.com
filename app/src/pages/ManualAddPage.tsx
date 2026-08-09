@@ -26,6 +26,7 @@ export function ManualAddPage() {
     seriesName: "",
     seriesNumber: "",
     notes: "",
+    shelfLocation: "",
   });
 
   async function handleSearch(e: FormEvent) {
@@ -68,6 +69,7 @@ export function ManualAddPage() {
         seriesName: form.seriesName || null,
         seriesNumber: form.seriesNumber ? Number(form.seriesNumber) : null,
         notes: form.notes || null,
+        shelfLocation: form.shelfLocation || null,
         source: "manual",
         allowDuplicate,
       });
@@ -196,6 +198,14 @@ export function ManualAddPage() {
               />
             </label>
           </div>
+          <label>
+            Shelf location
+            <input
+              value={form.shelfLocation}
+              onChange={(e) => setForm({ ...form, shelfLocation: e.target.value })}
+              placeholder="e.g. Living room, top shelf"
+            />
+          </label>
           <label>
             Notes
             <textarea rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

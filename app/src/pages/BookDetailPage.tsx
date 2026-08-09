@@ -174,6 +174,16 @@ export function BookDetailPage() {
       </section>
 
       <section className="book-detail__section">
+        <label className="section-label">Shelf location</label>
+        <input
+          placeholder="e.g. Living room, top shelf"
+          value={book.shelf_location ?? ""}
+          onChange={(e) => setBook({ ...book, shelf_location: e.target.value })}
+          onBlur={(e) => save({ shelfLocation: e.target.value || null })}
+        />
+      </section>
+
+      <section className="book-detail__section">
         <label className="section-label">Notes</label>
         <textarea
           rows={5}
