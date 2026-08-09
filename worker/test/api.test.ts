@@ -72,6 +72,66 @@ describe("auth", () => {
   });
 });
 
+// 1x1 transparent PNG — enough to exercise the upload path without a real cover photo.
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+function tinyPngBytes(): Uint8Array {
+  const binary = atob(TINY_PNG_BASE64);
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+describe("cover uploads (manual photo)", () => {
+  let cookie: string;
+
+  beforeEach(async () => {
+    cookie = await signUp(`covers-${crypto.randomUUID()}@example.com`);
+  });
+
+  it("requires authentication", async () => {
+    const res = await SELF.fetch("https://library.test/api/covers/upload", {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: tinyPngBytes(),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a non-image upload", async () => {
+    const res = await SELF.fetch("https://library.test/api/covers/upload", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", Cookie: cookie },
+      body: "not an image",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("uploads an image and the returned URL can be used directly as a book's cover", async () => {
+    const upload = await SELF.fetch("https://library.test/api/covers/upload", {
+      method: "POST",
+      headers: { "Content-Type": "image/png", Cookie: cookie },
+      body: tinyPngBytes(),
+    });
+    expect(upload.status).toBe(201);
+    const { url } = await upload.json<{ url: string }>();
+    expect(url).toMatch(/^\/api\/covers\//);
+
+    // The uploaded file is fetchable...
+    const fetched = await SELF.fetch(`https://library.test${url}`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.headers.get("content-type")).toBe("image/png");
+
+    // ...and using it as coverUrl on create stores it as-is, no re-fetch/re-cache.
+    const create = await SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "Photographed Book", coverUrl: url }),
+    });
+    expect(create.status).toBe(201);
+    const { book } = await create.json<{ book: { cover_url: string | null } }>();
+    expect(book.cover_url).toBe(url);
+  });
+});
+
 describe("books API", () => {
   let cookie: string;
 
@@ -95,8 +155,8 @@ describe("books API", () => {
     expect(book.status).toBe("to_read");
 
     const list = await SELF.fetch("https://library.test/api/books", { headers: { Cookie: cookie } });
-    const { books } = await list.json<{ books: unknown[] }>();
-    expect(books).toHaveLength(1);
+    const { books } = await list.json<{ books: Array<{ id: string }> }>();
+    expect(books.some((b) => b.id === book.id)).toBe(true);
 
     const patch = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
       method: "PATCH",

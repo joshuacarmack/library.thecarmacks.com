@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type DuplicateInfo, type LookupResult } from "../api";
 import { GENRES, LOCATIONS } from "../constants";
@@ -16,6 +16,8 @@ export function ManualAddPage() {
   const [searching, setSearching] = useState(false);
   const [duplicate, setDuplicate] = useState<DuplicateInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const [form, setForm] = useState({
     isbn: prefillIsbn,
@@ -53,7 +55,24 @@ export function ManualAddPage() {
       authors: result.authors.join(", "),
       coverSourceUrl: result.coverSourceUrl ?? "",
     }));
+    setCoverPhotoUrl(null); // a fresh pick replaces any photo taken for a previous attempt
     setMode("form");
+  }
+
+  async function handleCoverFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file if they retake the photo
+    if (!file) return;
+    setError(null);
+    setUploadingCover(true);
+    try {
+      const { url } = await api.uploadCoverPhoto(file);
+      setCoverPhotoUrl(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload photo.");
+    } finally {
+      setUploadingCover(false);
+    }
   }
 
   async function handleSave(e: FormEvent, allowDuplicate = false) {
@@ -65,6 +84,7 @@ export function ManualAddPage() {
         title: form.title,
         authors: form.authors.split(",").map((a) => a.trim()).filter(Boolean),
         coverSourceUrl: form.coverSourceUrl || null,
+        coverUrl: coverPhotoUrl,
         genres: form.genres,
         seriesName: form.seriesName || null,
         seriesNumber: form.seriesNumber ? Number(form.seriesNumber) : null,
@@ -161,6 +181,26 @@ export function ManualAddPage() {
             ISBN (optional)
             <input value={form.isbn} onChange={(e) => setForm({ ...form, isbn: e.target.value })} />
           </label>
+          <label>
+            Cover photo (optional)
+            <input type="file" accept="image/*" capture="environment" onChange={handleCoverFileChange} />
+          </label>
+          {uploadingCover && <p className="scan-hint">Uploading photo…</p>}
+          {(coverPhotoUrl || form.coverSourceUrl) && (
+            <div className="cover-photo-preview">
+              <img src={coverPhotoUrl || form.coverSourceUrl} alt="" className="confirm-cover" />
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => {
+                  setCoverPhotoUrl(null);
+                  setForm((f) => ({ ...f, coverSourceUrl: "" }));
+                }}
+              >
+                Remove photo
+              </button>
+            </div>
+          )}
           <fieldset>
             <legend>Genres</legend>
             <div className="genre-grid">

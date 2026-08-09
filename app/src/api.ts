@@ -100,6 +100,21 @@ export const api = {
     ),
   searchText: (q: string) => request<{ results: LookupResult[] }>(`/lookup/search?q=${encodeURIComponent(q)}`),
 
+  /** Uploads a photo of a book's actual cover (manual add). Returns the cached /api/covers/... URL. */
+  uploadCoverPhoto: async (file: Blob): Promise<{ url: string }> => {
+    const res = await fetch("/api/covers/upload", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "image/jpeg" },
+      credentials: "include",
+      body: file,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new ApiError((data as { error?: string })?.error ?? res.statusText, res.status);
+    }
+    return data as { url: string };
+  },
+
   listBooks: (params: Record<string, string | undefined> = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]);
     return request<{ books: Book[] }>(`/books?${qs.toString()}`);

@@ -466,6 +466,13 @@ a {
   border-radius: 8px;
   margin-bottom: 12px;
 }
+.cover-photo-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: -8px;
+}
 .confirm-isbn {
   color: var(--color-muted);
   font-size: 13px;

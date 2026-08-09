@@ -96,6 +96,7 @@ interface CreateBookBody {
   title: string;
   authors?: string[];
   coverSourceUrl?: string | null; // uncached source URL to fetch & store in R2
+  coverUrl?: string | null; // already-cached /api/covers/... URL (e.g. from a manual photo upload) — used as-is
   status?: BookStatus;
   rating?: number | null;
   genres?: string[];
@@ -129,8 +130,8 @@ bookRoutes.post("/", async (c) => {
   const user = await getUserFromRequest(c);
   const id = crypto.randomUUID();
 
-  let coverUrl: string | null = null;
-  if (body.coverSourceUrl) {
+  let coverUrl: string | null = body.coverUrl || null;
+  if (!coverUrl && body.coverSourceUrl) {
     coverUrl = await cacheCoverImage(c.env, body.coverSourceUrl, id);
   }
 
@@ -212,7 +213,10 @@ bookRoutes.patch("/:id", async (c) => {
     }
   }
 
-  if (body.coverSourceUrl) {
+  if (body.coverUrl) {
+    sets.push("cover_url = ?");
+    params.push(body.coverUrl);
+  } else if (body.coverSourceUrl) {
     const coverUrl = await cacheCoverImage(c.env, body.coverSourceUrl, id);
     if (coverUrl) {
       sets.push("cover_url = ?");
