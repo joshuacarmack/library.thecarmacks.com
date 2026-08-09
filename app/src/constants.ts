@@ -22,4 +22,4 @@ export const GENRES = [
 ] as const;
 
 // Fixed shelf location list — single-select, a book only lives in one place.
-export const LOCATIONS = ["Office", "Living Room", "Bedroom", "Office Closet", "Kid's Room", "Basement"] as const;
+export const LOCATIONS = ["Office", "Living Room", "Bedroom", "Office Closet", "Kid's Room", "Basement", "Basement - Kid Box"] as const;
