@@ -10,13 +10,15 @@ interface WishlistRow {
   id: string;
   name: string;
   item_count: number;
+  is_public: number;
+  share_token: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function rowToWishlist(row: WishlistRow): Wishlist {
-  return row;
+  return { ...row, is_public: !!row.is_public };
 }
 
 wishlistListRoutes.get("/", async (c) => {
@@ -47,25 +49,63 @@ wishlistListRoutes.post("/", async (c) => {
     .bind(id, name, user?.id ?? null, now, now)
     .run();
 
-  return c.json({ wishlist: { id, name, item_count: 0, created_by: user?.id ?? null, created_at: now, updated_at: now } }, 201);
+  return c.json(
+    {
+      wishlist: {
+        id,
+        name,
+        item_count: 0,
+        is_public: false,
+        share_token: null,
+        created_by: user?.id ?? null,
+        created_at: now,
+        updated_at: now,
+      },
+    },
+    201
+  );
 });
 
 wishlistListRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json<{ name?: string }>();
-  const name = body.name?.trim();
-  if (!name) return c.json({ error: "A list name is required." }, 400);
+  const body = await c.req.json<{ name?: string; isPublic?: boolean }>();
 
-  const existing = await c.env.DB.prepare("SELECT id FROM wishlists WHERE id = ?").bind(id).first();
+  const existing = await c.env.DB.prepare("SELECT * FROM wishlists WHERE id = ?").bind(id).first<WishlistRow>();
   if (!existing) return c.json({ error: "Wishlist not found." }, 404);
 
-  const clash = await c.env.DB.prepare("SELECT id FROM wishlists WHERE lower(name) = lower(?) AND id != ?")
-    .bind(name, id)
-    .first<{ id: string }>();
-  if (clash) return c.json({ error: "A list with that name already exists." }, 409);
+  const sets: string[] = [];
+  const params: unknown[] = [];
 
-  await c.env.DB.prepare("UPDATE wishlists SET name = ?, updated_at = ? WHERE id = ?")
-    .bind(name, new Date().toISOString(), id)
+  if (body.name !== undefined) {
+    const name = body.name.trim();
+    if (!name) return c.json({ error: "A list name is required." }, 400);
+    const clash = await c.env.DB.prepare("SELECT id FROM wishlists WHERE lower(name) = lower(?) AND id != ?")
+      .bind(name, id)
+      .first<{ id: string }>();
+    if (clash) return c.json({ error: "A list with that name already exists." }, 409);
+    sets.push("name = ?");
+    params.push(name);
+  }
+
+  if (body.isPublic !== undefined) {
+    sets.push("is_public = ?");
+    params.push(body.isPublic ? 1 : 0);
+    // Reuse the existing token across on/off toggles so a re-shared link doesn't
+    // change; only mint one the first time a list is made public.
+    if (body.isPublic && !existing.share_token) {
+      sets.push("share_token = ?");
+      params.push(crypto.randomUUID());
+    }
+  }
+
+  if (!sets.length) return c.json({ error: "Nothing to update." }, 400);
+
+  sets.push("updated_at = ?");
+  params.push(new Date().toISOString());
+  params.push(id);
+
+  await c.env.DB.prepare(`UPDATE wishlists SET ${sets.join(", ")} WHERE id = ?`)
+    .bind(...params)
     .run();
 
   const row = await c.env.DB.prepare(

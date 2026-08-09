@@ -51,9 +51,20 @@ export interface Wishlist {
   id: string;
   name: string;
   item_count: number;
+  is_public: boolean;
+  share_token: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicWishlistItem {
+  id: string;
+  isbn: string | null;
+  title: string;
+  authors: string[];
+  cover_url: string | null;
+  notes: string | null;
 }
 
 class ApiError extends Error {
@@ -145,7 +156,13 @@ export const api = {
     request<{ wishlist: Wishlist }>("/wishlists", { method: "POST", body: JSON.stringify({ name }) }),
   renameWishlist: (id: string, name: string) =>
     request<{ wishlist: Wishlist }>(`/wishlists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  setWishlistPublic: (id: string, isPublic: boolean) =>
+    request<{ wishlist: Wishlist }>(`/wishlists/${id}`, { method: "PATCH", body: JSON.stringify({ isPublic }) }),
   deleteWishlist: (id: string) => request<{ ok: true }>(`/wishlists/${id}`, { method: "DELETE" }),
+
+  /** Unauthenticated — the public read-only view behind a shared link. */
+  getPublicWishlist: (token: string) =>
+    request<{ name: string; items: PublicWishlistItem[] }>(`/public/wishlists/${encodeURIComponent(token)}`),
 
   listWishlist: (wishlistId: string, q?: string) => {
     const params = new URLSearchParams({ wishlistId, ...(q ? { q } : {}) });

@@ -382,6 +382,74 @@ describe("wishlists API (the named lists themselves)", () => {
     });
     expect(second.status).toBe(409);
   });
+
+  it("starts private with no share token", async () => {
+    const id = await createWishlist(cookie, `Private by default ${crypto.randomUUID()}`);
+    const list = await SELF.fetch("https://library.test/api/wishlists", { headers: { Cookie: cookie } });
+    const { wishlists } = await list.json<{ wishlists: Array<{ id: string; is_public: boolean; share_token: string | null }> }>();
+    const found = wishlists.find((w) => w.id === id);
+    expect(found?.is_public).toBe(false);
+    expect(found?.share_token).toBeNull();
+  });
+
+  it("makes a wishlist public, exposes it at the public endpoint, and keeps the same token across toggles", async () => {
+    const id = await createWishlist(cookie, `Sharable list ${crypto.randomUUID()}`);
+    await SELF.fetch("https://library.test/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ wishlistId: id, title: "Shared Book", authors: ["Some Author"], notes: "size L" }),
+    });
+
+    const publish = await SELF.fetch(`https://library.test/api/wishlists/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ isPublic: true }),
+    });
+    expect(publish.status).toBe(200);
+    const { wishlist: published } = await publish.json<{ wishlist: { is_public: boolean; share_token: string } }>();
+    expect(published.is_public).toBe(true);
+    expect(published.share_token).toBeTruthy();
+    const token = published.share_token;
+
+    // Publicly readable, no auth, no owner-only fields leaked.
+    const publicView = await SELF.fetch(`https://library.test/api/public/wishlists/${token}`);
+    expect(publicView.status).toBe(200);
+    const body = await publicView.json<{ name: string; items: Array<{ title: string; authors: string[]; notes: string }> }>();
+    expect(body.name).toContain("Sharable list");
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].title).toBe("Shared Book");
+    expect(body.items[0].authors).toEqual(["Some Author"]);
+    expect(body.items[0].notes).toBe("size L");
+    expect(body.items[0]).not.toHaveProperty("added_by");
+    expect(body.items[0]).not.toHaveProperty("wishlist_id");
+
+    // Making it private again kills the link immediately...
+    const unpublish = await SELF.fetch(`https://library.test/api/wishlists/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ isPublic: false }),
+    });
+    const { wishlist: unpublished } = await unpublish.json<{ wishlist: { is_public: boolean; share_token: string } }>();
+    expect(unpublished.is_public).toBe(false);
+    expect(unpublished.share_token).toBe(token); // token itself is retained, just gated off
+
+    const afterUnpublish = await SELF.fetch(`https://library.test/api/public/wishlists/${token}`);
+    expect(afterUnpublish.status).toBe(404);
+
+    // ...and re-publishing reuses the same token rather than minting a new one.
+    const republish = await SELF.fetch(`https://library.test/api/wishlists/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ isPublic: true }),
+    });
+    const { wishlist: republished } = await republish.json<{ wishlist: { share_token: string } }>();
+    expect(republished.share_token).toBe(token);
+  });
+
+  it("returns 404 for an unknown or made-up token", async () => {
+    const res = await SELF.fetch(`https://library.test/api/public/wishlists/${crypto.randomUUID()}`);
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("wishlist items API", () => {

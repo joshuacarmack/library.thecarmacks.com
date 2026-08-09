@@ -50,6 +50,8 @@ export interface Wishlist {
   id: string;
   name: string;
   item_count: number;
+  is_public: boolean;
+  share_token: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

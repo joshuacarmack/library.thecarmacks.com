@@ -11,6 +11,8 @@ export function WishlistPage() {
   const [newListName, setNewListName] = useState<string | null>(null); // non-null while the "new list" input is open
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [togglingPublic, setTogglingPublic] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const [items, setItems] = useState<WishlistItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -94,6 +96,33 @@ export function WishlistPage() {
       await refreshLists();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not rename list.");
+    }
+  }
+
+  async function handleTogglePublic() {
+    if (!activeList) return;
+    setError(null);
+    setTogglingPublic(true);
+    try {
+      await api.setWishlistPublic(activeList.id, !activeList.is_public);
+      await refreshLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update sharing.");
+    } finally {
+      setTogglingPublic(false);
+    }
+  }
+
+  async function handleCopyLink(shareToken: string) {
+    const url = `${window.location.origin}/w/${shareToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API can be unavailable (permissions, non-secure context) — the
+      // link is still visible in the UI to copy by hand, so this isn't fatal.
+      setError("Couldn't copy automatically — select and copy the link manually.");
     }
   }
 
@@ -267,6 +296,9 @@ export function WishlistPage() {
               <button className="btn btn--ghost btn--sm" onClick={handleDeleteList}>
                 Delete list
               </button>
+              <button className="btn btn--ghost btn--sm" disabled={togglingPublic} onClick={handleTogglePublic}>
+                {activeList.is_public ? "Make private" : "Make public"}
+              </button>
             </>
           ) : (
             <form className="tag-input-row" onSubmit={handleRename}>
@@ -279,6 +311,23 @@ export function WishlistPage() {
               </button>
             </form>
           )}
+        </div>
+      )}
+
+      {activeList?.is_public && activeList.share_token && (
+        <div className="wishlist-share">
+          <span>🌐 Anyone with this link can view (not edit) this list:</span>
+          <div className="wishlist-share__link-row">
+            <input
+              readOnly
+              className="wishlist-share__link"
+              value={`${window.location.origin}/w/${activeList.share_token}`}
+              onFocus={(e) => e.target.select()}
+            />
+            <button className="btn btn--ghost btn--sm" onClick={() => handleCopyLink(activeList.share_token!)}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
         </div>
       )}
 

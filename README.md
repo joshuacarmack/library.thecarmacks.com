@@ -218,6 +218,11 @@ scripts/
   all implemented per spec — see `specs.md` for the intended UX if extending them.
 - Wishlist (multiple named lists, "got it" conversion into the real library) is implemented — see
   `worker/src/routes/wishlist.ts` / `wishlists.ts`. Recommendations are still out of scope.
+- Any wishlist can be made public from its "Make public" button, giving a read-only share link
+  (`/w/<token>`, no login) for gift-giving. Gated by an unguessable token *and* the list's
+  `is_public` flag, so toggling it back private kills the link instantly without needing to rotate
+  the token — re-publishing the same list reuses it. See `worker/src/routes/public.ts`. The public
+  view only exposes title/authors/cover/notes/isbn per item, nothing about who owns the list.
 - The fixed genre (`GENRES`) and shelf location (`LOCATIONS`) lists are **duplicated** between
   `app/src/constants.ts` and `worker/src/constants.ts` — there's no shared package between the
   worker and app builds, and the worker copy is also used server-side to validate `shelfLocation`

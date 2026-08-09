@@ -8,6 +8,7 @@ import { lookupRoutes } from "./routes/lookup";
 import { coverRoutes } from "./routes/covers";
 import { healthRoutes } from "./routes/health";
 import { backupRoutes } from "./routes/backup";
+import { publicRoutes } from "./routes/public";
 import { getUserFromRequest } from "./auth";
 import { runBackup } from "./backup";
 
@@ -18,6 +19,8 @@ app.route("/api/health", healthRoutes);
 app.route("/api/auth", authRoutes);
 // Cover images are cached content, not sensitive — served without auth so <img> tags work simply.
 app.route("/api/covers", coverRoutes);
+// Read-only public wishlist views — gated by an unguessable token + is_public, not auth.
+app.route("/api/public", publicRoutes);
 
 // Everything else under /api requires a logged-in session (shared library, either account).
 app.use("/api/books/*", async (c, next) => {
