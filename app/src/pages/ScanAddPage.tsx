@@ -67,6 +67,9 @@ export function ScanAddPage() {
           <Link to="/add/manual" className="btn btn--ghost">
             No barcode? Add manually
           </Link>
+          <Link to="/bulk-add" className="scan-page__bulk-link">
+            Adding a whole stack at a desk? Try Bulk Add with a USB scanner →
+          </Link>
         </>
       )}
 

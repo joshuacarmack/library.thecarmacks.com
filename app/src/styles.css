@@ -445,6 +445,14 @@ a {
   font-size: 13px;
   margin: 12px 0;
 }
+.scan-page__bulk-link {
+  display: block;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 13px;
+  margin-top: 16px;
+  text-decoration: underline;
+}
 
 .confirm-card {
   background: var(--color-surface);
