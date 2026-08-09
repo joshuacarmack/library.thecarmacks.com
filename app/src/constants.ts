@@ -15,6 +15,7 @@ export const GENRES = [
   "Children's",
   "Poetry",
   "Self-Help",
+  "Cookbooks",
   "Classics",
   "Graphic Novel",
   "Other",
