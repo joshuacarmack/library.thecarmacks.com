@@ -2,6 +2,15 @@ import { Hono } from "hono";
 import type { BookRecord, BookStatus, Env } from "../types";
 import { cacheCoverImage } from "../covers";
 import { getUserFromRequest } from "../auth";
+import { LOCATIONS } from "../constants";
+
+const VALID_LOCATIONS = new Set<string>(LOCATIONS);
+
+/** Returns an error message if shelfLocation is set but not one of the fixed options; null if fine. */
+function shelfLocationError(shelfLocation: string | null | undefined): string | null {
+  if (!shelfLocation) return null;
+  return VALID_LOCATIONS.has(shelfLocation) ? null : `Shelf location must be one of: ${LOCATIONS.join(", ")}.`;
+}
 
 export const bookRoutes = new Hono<{ Bindings: Env }>();
 
@@ -104,6 +113,8 @@ bookRoutes.post("/", async (c) => {
   if (!body.title?.trim()) {
     return c.json({ error: "Title is required." }, 400);
   }
+  const shelfError = shelfLocationError(body.shelfLocation);
+  if (shelfError) return c.json({ error: shelfError }, 400);
 
   const isbn = body.isbn?.trim() || null;
   if (isbn && !body.allowDuplicate) {
@@ -180,6 +191,11 @@ bookRoutes.patch("/:id", async (c) => {
 
   const existing = await c.env.DB.prepare("SELECT * FROM books WHERE id = ?").bind(id).first<BookRow>();
   if (!existing) return c.json({ error: "Book not found." }, 404);
+
+  if (body.shelfLocation !== undefined) {
+    const shelfError = shelfLocationError(body.shelfLocation);
+    if (shelfError) return c.json({ error: shelfError }, 400);
+  }
 
   const sets: string[] = [];
   const params: unknown[] = [];

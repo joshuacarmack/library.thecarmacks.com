@@ -19,3 +19,6 @@ export const GENRES = [
   "Graphic Novel",
   "Other",
 ] as const;
+
+// Fixed shelf location list — single-select, a book only lives in one place.
+export const LOCATIONS = ["Office", "Living Room", "Bedroom", "Office Closet", "Kid's Room", "Basement"] as const;

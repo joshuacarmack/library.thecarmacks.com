@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type DuplicateInfo, type LookupResult } from "../api";
-import { GENRES } from "../constants";
+import { GENRES, LOCATIONS } from "../constants";
 
 type Mode = "search" | "results" | "form";
 
@@ -200,11 +200,14 @@ export function ManualAddPage() {
           </div>
           <label>
             Shelf location
-            <input
-              value={form.shelfLocation}
-              onChange={(e) => setForm({ ...form, shelfLocation: e.target.value })}
-              placeholder="e.g. Living room, top shelf"
-            />
+            <select value={form.shelfLocation} onChange={(e) => setForm({ ...form, shelfLocation: e.target.value })}>
+              <option value="">Unset</option>
+              {LOCATIONS.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Notes

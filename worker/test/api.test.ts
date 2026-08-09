@@ -169,11 +169,11 @@ describe("books API", () => {
     const create = await SELF.fetch("https://library.test/api/books", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ title: "Shelved Book", shelfLocation: "Living room" }),
+      body: JSON.stringify({ title: "Shelved Book", shelfLocation: "Living Room" }),
     });
     expect(create.status).toBe(201);
     const { book } = await create.json<{ book: { id: string; shelf_location: string | null } }>();
-    expect(book.shelf_location).toBe("Living room");
+    expect(book.shelf_location).toBe("Living Room");
 
     const patch = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
       method: "PATCH",
@@ -190,6 +190,30 @@ describe("books API", () => {
     const bySearch = await SELF.fetch("https://library.test/api/books?q=Office", { headers: { Cookie: cookie } });
     const { books: searchMatches } = await bySearch.json<{ books: Array<{ id: string }> }>();
     expect(searchMatches.some((b) => b.id === book.id)).toBe(true);
+  });
+
+  it("rejects a shelf location outside the fixed list, on both create and update", async () => {
+    const create = await SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "Freeform Attempt", shelfLocation: "Attic" }),
+    });
+    expect(create.status).toBe(400);
+
+    const ok = await SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "Valid Location Book", shelfLocation: "Basement" }),
+    });
+    expect(ok.status).toBe(201);
+    const { book } = await ok.json<{ book: { id: string } }>();
+
+    const patch = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ shelfLocation: "Attic" }),
+    });
+    expect(patch.status).toBe(400);
   });
 });
 

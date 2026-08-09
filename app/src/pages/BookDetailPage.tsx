@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, type Book } from "../api";
 import { StarRating } from "../components/StarRating";
-import { GENRES } from "../constants";
+import { GENRES, LOCATIONS } from "../constants";
 
 const STATUSES: Array<{ value: Book["status"]; label: string }> = [
   { value: "to_read", label: "To Read" },
@@ -175,12 +175,21 @@ export function BookDetailPage() {
 
       <section className="book-detail__section">
         <label className="section-label">Shelf location</label>
-        <input
-          placeholder="e.g. Living room, top shelf"
+        <select
           value={book.shelf_location ?? ""}
-          onChange={(e) => setBook({ ...book, shelf_location: e.target.value })}
-          onBlur={(e) => save({ shelfLocation: e.target.value || null })}
-        />
+          onChange={(e) => {
+            const value = e.target.value || null;
+            setBook({ ...book, shelf_location: value });
+            save({ shelfLocation: value });
+          }}
+        >
+          <option value="">Unset</option>
+          {LOCATIONS.map((loc) => (
+            <option key={loc} value={loc}>
+              {loc}
+            </option>
+          ))}
+        </select>
       </section>
 
       <section className="book-detail__section">
