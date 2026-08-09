@@ -27,6 +27,9 @@ npx wrangler d1 create library-db
 # Create the R2 bucket for cover images
 npx wrangler r2 bucket create library-covers
 
+# Create the R2 bucket for weekly DB backups (see "Backups" below)
+npx wrangler r2 bucket create library-backups
+
 # Apply the schema
 npm run db:migrate:local    # for local dev
 npm run db:migrate:remote   # once, against production
@@ -128,6 +131,46 @@ the HTTP status code directly, with a trigger firing when it's not `200`. Either
 naturally alerts on total unreachability (DNS failure, TLS error, timeout), since those show up as
 an item read failure in Zabbix regardless of which check method you use.
 
+## Backups
+
+A weekly Cron Trigger (`0 6 * * 7` — Sundays 06:00 UTC, see `wrangler.jsonc` `triggers.crons`)
+dumps every row of `users`, `books`, `wishlists`, and `wishlist_items` as JSON and writes it to
+the `library-backups` R2 bucket under `backups/library-db-<date>-<timestamp>.json`
+(`worker/src/backup.ts`). `sessions` is deliberately excluded — it's ephemeral auth state, not
+data worth restoring. The last 12 backups are kept; older ones are pruned automatically after each
+run (~3 months of weekly history).
+
+D1 also has Cloudflare's own built-in Time Travel (30-day automatic point-in-time recovery, no
+setup needed) — these R2 backups are a longer-retention, offsite-of-D1 supplement to that, not a
+replacement.
+
+**Trigger one manually** (e.g. before a risky migration, or just to check it's working) — requires
+being logged in:
+
+```bash
+curl -X POST https://library.thecarmacks.com/api/admin/backup -b <session cookie>
+```
+
+Returns `{"ok":true,"key":"...","sizeBytes":...,"rowCounts":{...}}`. `/api/health` also reports
+`checks.backups`, so R2 reachability is covered by the same Zabbix monitoring as the rest.
+
+**List backups:**
+
+```bash
+npx wrangler r2 object list library-backups --prefix=backups/ --remote
+```
+
+**Restore** — download a backup, turn it into reviewable SQL, then run it yourself
+(`scripts/restore-backup.mjs` never executes anything on its own, since a restore means wiping and
+replacing every row in these tables):
+
+```bash
+npx wrangler r2 object get library-backups/backups/<key> --file=backup.json --remote
+node scripts/restore-backup.mjs backup.json restore.sql
+# review restore.sql, then:
+npx wrangler d1 execute library-db --remote --file=restore.sql
+```
+
 ## Deploy
 
 ```bash
@@ -141,23 +184,26 @@ Builds the frontend and deploys the Worker (with static assets) via Wrangler.
 ```
 worker/
   src/
-    index.ts       # Hono app, route mounting, auth gate
+    index.ts       # Hono app, route mounting, auth gate, scheduled (cron) handler
     auth.ts         # PBKDF2 password hashing + D1-backed sessions
     lookup.ts        # Google Books -> Open Library ISBN/text lookup
     covers.ts         # Fetch-and-cache cover images into R2
-    isbn.ts            # ISBN normalization + checksum validation
-    routes/           # auth, books, lookup, covers endpoints
+    backup.ts          # Weekly D1 -> R2 JSON backup (see "Backups" above)
+    isbn.ts              # ISBN normalization + checksum validation
+    constants.ts          # GENRES / LOCATIONS — mirrored in app/src/constants.ts, see notes below
+    routes/               # auth, books, wishlist(s), lookup, covers, admin (backup), health
   migrations/         # D1 schema
   test/               # vitest (unit + SELF.fetch integration tests)
 app/
   src/
-    pages/            # Login, Library, BookDetail, ScanAdd, ManualAdd, BulkAdd
+    pages/            # Login, Library, BookDetail, Wishlist, ScanAdd, ManualAdd, BulkAdd
     components/        # AppShell/bottom nav, BookCard, StarRating, BarcodeScanner, ErrorBoundary
     hooks/              # useOnlineStatus
     api.ts             # Typed fetch client for the Worker API
 scripts/
   generate-icons.mjs   # Regenerates the PWA PNG icons
   seed-accounts.mjs     # Creates the two accounts against a running instance
+  restore-backup.mjs     # Turns a backup JSON into reviewable restore SQL (see "Backups" above)
 ```
 
 ## Notes / known follow-ups

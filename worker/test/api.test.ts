@@ -27,6 +27,7 @@ describe("health", () => {
     expect(body.status).toBe("ok");
     expect(body.checks.database).toBe("ok");
     expect(body.checks.covers).toBe("ok");
+    expect(body.checks.backups).toBe("ok");
   });
 });
 
@@ -69,6 +70,39 @@ describe("auth", () => {
     await SELF.fetch("https://library.test/api/auth/logout", { method: "POST", headers: { Cookie: cookie } });
     const me = await SELF.fetch("https://library.test/api/auth/me", { headers: { Cookie: cookie } });
     expect(me.status).toBe(401);
+  });
+});
+
+describe("backups", () => {
+  it("requires authentication to trigger a backup manually", async () => {
+    const res = await SELF.fetch("https://library.test/api/admin/backup", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+
+  it("writes a JSON snapshot of every backed-up table to R2", async () => {
+    const cookie = await signUp(`backup-${crypto.randomUUID()}@example.com`);
+    await SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ title: "Backed Up Book" }),
+    });
+
+    const res = await SELF.fetch("https://library.test/api/admin/backup", { method: "POST", headers: { Cookie: cookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ ok: boolean; key: string; sizeBytes: number; rowCounts: Record<string, number> }>();
+    expect(body.ok).toBe(true);
+    expect(body.key).toMatch(/^backups\/library-db-\d{4}-\d{2}-\d{2}-\d+\.json$/);
+    expect(body.rowCounts.users).toBeGreaterThanOrEqual(1);
+    expect(body.rowCounts.books).toBeGreaterThanOrEqual(1);
+    // sessions is intentionally not a backed-up table.
+    expect(body.rowCounts.sessions).toBeUndefined();
+
+    // The object is actually in R2 and contains what it claims to.
+    const { env } = await import("cloudflare:test");
+    const object = await env.BACKUPS.get(body.key);
+    expect(object).not.toBeNull();
+    const parsed = JSON.parse(await object!.text()) as { tables: { books: Array<{ title: string }> } };
+    expect(parsed.tables.books.some((b) => b.title === "Backed Up Book")).toBe(true);
   });
 });
 

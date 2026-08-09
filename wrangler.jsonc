@@ -22,6 +22,10 @@
     {
       "binding": "COVERS",
       "bucket_name": "library-covers"
+    },
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "library-backups"
     }
   ],
   "vars": {
@@ -29,5 +33,9 @@
   },
   "observability": {
     "enabled": true
+  },
+  "triggers": {
+    // Sundays at 06:00 UTC — low-traffic time, well clear of any weekday usage.
+    "crons": ["0 6 * * 7"]
   }
 }

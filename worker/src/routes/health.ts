@@ -33,6 +33,14 @@ healthRoutes.get("/", async (c) => {
     healthy = false;
   }
 
+  try {
+    await c.env.BACKUPS.head("__healthcheck__");
+    checks.backups = "ok";
+  } catch {
+    checks.backups = "error";
+    healthy = false;
+  }
+
   c.header("Cache-Control", "no-store");
   return c.json(
     {

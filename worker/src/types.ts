@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   COVERS: R2Bucket;
+  BACKUPS: R2Bucket;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
   SIGNUP_CODE?: string;
