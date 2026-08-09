@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type DuplicateInfo, type LookupResult } from "../api";
+import { LOCATIONS } from "../constants";
 
 interface QueueItem {
   id: string;
@@ -23,6 +24,8 @@ export function BulkAddPage() {
   const [pending, setPending] = useState("");
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [needsReview, setNeedsReview] = useState<NeedsReviewItem[]>([]);
+  // Applies to every book saved this session — set it once for the stack you're scanning.
+  const [shelfLocation, setShelfLocation] = useState("");
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -50,6 +53,7 @@ export function BulkAddPage() {
           authors: result.authors,
           coverSourceUrl: result.coverSourceUrl,
           source: result.source,
+          shelfLocation: shelfLocation || null,
         });
         if (res.duplicate) {
           setQueue((q) =>
@@ -80,6 +84,7 @@ export function BulkAddPage() {
       authors: item.result.authors,
       coverSourceUrl: item.result.coverSourceUrl,
       source: item.result.source,
+      shelfLocation: shelfLocation || null,
       allowDuplicate: true,
     });
     if (res.book) {
@@ -104,15 +109,28 @@ export function BulkAddPage() {
         </Link>
       </header>
 
-      <form onSubmit={handleSubmit} className="bulk-scan-form">
-        <input
-          ref={inputRef}
-          value={pending}
-          onChange={(e) => setPending(e.target.value)}
-          placeholder="Scan focus — click here if scans stop registering"
-          autoFocus
-        />
-      </form>
+      <div className="bulk-scan-form">
+        <label className="bulk-shelf-select">
+          Shelf location for this batch
+          <select value={shelfLocation} onChange={(e) => setShelfLocation(e.target.value)}>
+            <option value="">Unset</option>
+            {LOCATIONS.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+        </label>
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            value={pending}
+            onChange={(e) => setPending(e.target.value)}
+            placeholder="Scan focus — click here if scans stop registering"
+            autoFocus
+          />
+        </form>
+      </div>
 
       <div className="bulk-columns">
         <section>

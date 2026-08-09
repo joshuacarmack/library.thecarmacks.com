@@ -665,6 +665,21 @@ legend {
 .bulk-add-header p {
   color: var(--color-muted);
 }
+.bulk-shelf-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 12px;
+}
+.bulk-shelf-select select {
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-ink);
+}
 .bulk-scan-form input {
   width: 100%;
   padding: 16px;
