@@ -20,8 +20,7 @@ const baseUrl = process.argv[2] ?? "http://127.0.0.1:8787";
 const signupCode = process.env.SIGNUP_CODE;
 
 const accounts = [
-  { displayName: "Joshua", defaultEmail: "joshuahcarmack@gmail.com" },
-  { displayName: "Meg", defaultEmail: "" },
+  { displayName: "Joshua", defaultEmail: "joshua@example.com" }
 ];
 
 const ENTER_CHARS = new Set(["\n", "\r", "\u0004"]); // newline, carriage return, EOF
