@@ -2,10 +2,15 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type DuplicateInfo, type LookupResult } from "../api";
 import { LOCATIONS } from "../constants";
+import { MEDIA, physicalFormats, type MediaType } from "../media";
+import { MediaTypePicker } from "../components/MediaTypePicker";
+import { useMediaType } from "../hooks/useMediaType";
 
 interface QueueItem {
   id: string;
   isbn: string;
+  mediaType: MediaType;
+  format: string;
   state: "looking-up" | "saved" | "duplicate" | "error";
   result?: LookupResult | null;
   duplicate?: DuplicateInfo | null;
@@ -15,6 +20,7 @@ interface QueueItem {
 interface NeedsReviewItem {
   id: string;
   isbn: string;
+  mediaType: MediaType;
   scannedAt: string;
 }
 
@@ -26,6 +32,12 @@ export function BulkAddPage() {
   const [needsReview, setNeedsReview] = useState<NeedsReviewItem[]>([]);
   // Applies to every book saved this session — set it once for the stack you're scanning.
   const [shelfLocation, setShelfLocation] = useState("");
+  // Also per batch: scan a stack of all-CDs or all-records, then switch.
+  const [mediaType, setMediaType] = useMediaType();
+  const [format, setFormat] = useState(physicalFormats(mediaType)[0].value);
+  const batchFormats = physicalFormats(mediaType);
+
+  useEffect(() => setFormat(physicalFormats(mediaType)[0].value), [mediaType]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -38,16 +50,22 @@ export function BulkAddPage() {
     const isbn = rawIsbn.replace(/[^0-9Xx]/g, "").toUpperCase();
     if (!isbn) return;
     const id = crypto.randomUUID();
-    setQueue((q) => [{ id, isbn, state: "looking-up" }, ...q]);
+    // Snapshot the batch settings so switching mid-lookup doesn't change this scan.
+    const scanType = mediaType;
+    const scanFormat = format;
+    setQueue((q) => [{ id, isbn, mediaType: scanType, format: scanFormat, state: "looking-up" }, ...q]);
 
     try {
-      const { found, result, duplicate } = await api.lookupIsbn(isbn);
+      const { found, result, duplicate } = await api.lookupCode(isbn, scanType);
       if (duplicate) {
         setQueue((q) => q.map((item) => (item.id === id ? { ...item, state: "duplicate", result, duplicate } : item)));
         return;
       }
       if (found && result) {
         const res = await api.createBook({
+          mediaType: scanType,
+          format: scanFormat,
+          year: result.year ?? null,
           isbn: result.isbn,
           title: result.title,
           authors: result.authors,
@@ -66,7 +84,7 @@ export function BulkAddPage() {
       }
       // Not found anywhere — drop to needs-review, don't block the scanning burst.
       setQueue((q) => q.filter((item) => item.id !== id));
-      setNeedsReview((r) => [{ id, isbn, scannedAt: new Date().toLocaleTimeString() }, ...r]);
+      setNeedsReview((r) => [{ id, isbn, mediaType: scanType, scannedAt: new Date().toLocaleTimeString() }, ...r]);
     } catch (err) {
       setQueue((q) =>
         q.map((item) =>
@@ -79,6 +97,9 @@ export function BulkAddPage() {
   async function addDuplicateAnyway(item: QueueItem) {
     if (!item.result) return;
     const res = await api.createBook({
+      mediaType: item.mediaType,
+      format: item.format,
+      year: item.result.year ?? null,
       isbn: item.result.isbn,
       title: item.result.title,
       authors: item.result.authors,
@@ -110,6 +131,19 @@ export function BulkAddPage() {
       </header>
 
       <div className="bulk-scan-form">
+        <MediaTypePicker value={mediaType} onChange={setMediaType} />
+        {batchFormats.length > 1 && (
+          <label className="bulk-shelf-select">
+            Format for this batch
+            <select value={format} onChange={(e) => setFormat(e.target.value)}>
+              {batchFormats.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="bulk-shelf-select">
           Shelf location for this batch
           <select value={shelfLocation} onChange={(e) => setShelfLocation(e.target.value)}>
@@ -168,9 +202,16 @@ export function BulkAddPage() {
             {needsReview.map((item) => (
               <li key={item.id} className="bulk-queue__item bulk-queue__item--error">
                 <div className="bulk-queue__info">
-                  <div className="bulk-queue__title">ISBN {item.isbn}</div>
-                  <div className="bulk-queue__author">No match found · scanned {item.scannedAt}</div>
-                  <Link to={`/add/manual?isbn=${encodeURIComponent(item.isbn)}`} className="btn btn--ghost btn--sm">
+                  <div className="bulk-queue__title">
+                    {MEDIA[item.mediaType].codeLabel} {item.isbn}
+                  </div>
+                  <div className="bulk-queue__author">
+                    {MEDIA[item.mediaType].tabLabel} · no match found · scanned {item.scannedAt}
+                  </div>
+                  <Link
+                    to={`/add/manual?type=${item.mediaType}&isbn=${encodeURIComponent(item.isbn)}`}
+                    className="btn btn--ghost btn--sm"
+                  >
                     Resolve manually
                   </Link>
                 </div>

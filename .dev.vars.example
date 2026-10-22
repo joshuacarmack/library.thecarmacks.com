@@ -3,5 +3,9 @@
 # Optional: required to unblock lookups if the shared Google Books quota is exhausted.
 GOOGLE_BOOKS_API_KEY=
 
+# Optional: enables movie search and DVD barcode matching (posters, directors). Free at themoviedb.org.
+# Either the v3 "API Key" or the v4 "API Read Access Token" works.
+TMDB_API_KEY=
+
 # Optional: gates /api/auth/signup so randoms can't self-register on the public URL.
 SIGNUP_CODE=

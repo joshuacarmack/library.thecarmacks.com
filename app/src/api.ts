@@ -1,5 +1,8 @@
+import type { MediaType } from "./media";
+
 export interface Book {
   id: string;
+  media_type: MediaType;
   isbn: string | null;
   title: string;
   authors: string[];
@@ -13,6 +16,7 @@ export interface Book {
   notes: string | null;
   shelf_location: string | null;
   format: string;
+  year: number | null;
   source: string | null;
   added_by: string | null;
   created_at: string;
@@ -20,12 +24,23 @@ export interface Book {
 }
 
 export interface LookupResult {
+  /** ISBN for books; UPC/EAN barcode for music and movies. */
   isbn: string | null;
   title: string;
+  /** Authors, artists, or directors depending on media type. */
   authors: string[];
   coverSourceUrl: string | null;
-  source: "google_books" | "open_library";
+  year?: number | null;
+  format?: string | null;
+  source: "google_books" | "open_library" | "musicbrainz" | "tmdb" | "upcitemdb";
 }
+
+export type LookupResponse = {
+  found: boolean;
+  result: LookupResult | null;
+  duplicate: DuplicateInfo | null;
+  validChecksum: boolean;
+};
 
 export interface DuplicateInfo {
   id: string;
@@ -105,11 +120,17 @@ export const api = {
     }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
 
-  lookupIsbn: (isbn: string) =>
-    request<{ found: boolean; result: LookupResult | null; duplicate: DuplicateInfo | null; validChecksum: boolean }>(
-      `/lookup/isbn/${encodeURIComponent(isbn)}`
+  lookupIsbn: (isbn: string) => request<LookupResponse>(`/lookup/isbn/${encodeURIComponent(isbn)}`),
+  /** CD / record / DVD barcode lookup. */
+  lookupBarcode: (code: string, type: "music" | "movie") =>
+    request<LookupResponse>(`/lookup/barcode/${encodeURIComponent(code)}?type=${type}`),
+  /** Books use ISBN, music/movies use product barcodes — picks the right endpoint. */
+  lookupCode: (code: string, type: MediaType): Promise<LookupResponse> =>
+    type === "book" ? api.lookupIsbn(code) : api.lookupBarcode(code, type),
+  searchText: (q: string, type: MediaType = "book") =>
+    request<{ results: LookupResult[]; unavailable?: string }>(
+      `/lookup/search?q=${encodeURIComponent(q)}&type=${type}`
     ),
-  searchText: (q: string) => request<{ results: LookupResult[] }>(`/lookup/search?q=${encodeURIComponent(q)}`),
 
   /** Uploads a photo of a book's actual cover (manual add). Returns the cached /api/covers/... URL. */
   uploadCoverPhoto: async (file: Blob): Promise<{ url: string }> => {

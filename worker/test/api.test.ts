@@ -311,6 +311,102 @@ describe("books API", () => {
   });
 });
 
+describe("music and movies", () => {
+  let cookie: string;
+
+  beforeEach(async () => {
+    cookie = await signUp(`media-${crypto.randomUUID()}@example.com`);
+  });
+
+  async function create(body: Record<string, unknown>) {
+    return SELF.fetch("https://library.test/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("defaults existing-style creates to a physical book", async () => {
+    const res = await create({ title: "Plain Book" });
+    const { book } = await res.json<{ book: { media_type: string; format: string } }>();
+    expect(book.media_type).toBe("book");
+    expect(book.format).toBe("physical");
+  });
+
+  it("creates music and movies with their own formats, year, and location", async () => {
+    const cd = await create({ mediaType: "music", title: "OK Computer", authors: ["Radiohead"], year: 1997, shelfLocation: "Office" });
+    expect(cd.status).toBe(201);
+    const { book: album } = await cd.json<{ book: { media_type: string; format: string; year: number; shelf_location: string } }>();
+    expect(album).toMatchObject({ media_type: "music", format: "cd", year: 1997, shelf_location: "Office" });
+
+    const record = await create({ mediaType: "music", format: "vinyl", title: "Rumours" });
+    const { book: vinyl } = await record.json<{ book: { format: string } }>();
+    expect(vinyl.format).toBe("vinyl");
+
+    const dvd = await create({ mediaType: "movie", title: "The Matrix" });
+    const { book: movie } = await dvd.json<{ book: { format: string } }>();
+    expect(movie.format).toBe("dvd");
+
+    const jellyfin = await create({ mediaType: "movie", format: "jellyfin", title: "Arrival" });
+    expect(jellyfin.status).toBe(201);
+  });
+
+  it("rejects a format that doesn't belong to the media type, and an unknown media type", async () => {
+    expect((await create({ mediaType: "music", format: "dvd", title: "Wrong" })).status).toBe(400);
+    expect((await create({ mediaType: "book", format: "vinyl", title: "Wrong" })).status).toBe(400);
+    expect((await create({ mediaType: "game", title: "Wrong" })).status).toBe(400);
+
+    const ok = await create({ mediaType: "movie", title: "Heat" });
+    const { book } = await ok.json<{ book: { id: string } }>();
+    const toVinyl = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ format: "vinyl" }),
+    });
+    expect(toVinyl.status).toBe(400);
+
+    const toJellyfin = await SELF.fetch(`https://library.test/api/books/${book.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ format: "jellyfin" }),
+    });
+    const { book: patched } = await toJellyfin.json<{ book: { format: string } }>();
+    expect(patched.format).toBe("jellyfin");
+  });
+
+  it("filters the library by media type and format", async () => {
+    const tag = crypto.randomUUID().slice(0, 8);
+    await create({ title: `Book ${tag}` });
+    await create({ mediaType: "music", format: "vinyl", title: `Record ${tag}` });
+    await create({ mediaType: "music", format: "cd", title: `CD ${tag}` });
+    await create({ mediaType: "movie", title: `DVD ${tag}` });
+
+    const list = async (qs: string) => {
+      const res = await SELF.fetch(`https://library.test/api/books?q=${tag}&${qs}`, { headers: { Cookie: cookie } });
+      const { books } = await res.json<{ books: Array<{ title: string }> }>();
+      return books.map((b) => b.title).sort();
+    };
+    expect(await list("type=music")).toEqual([`CD ${tag}`, `Record ${tag}`]);
+    expect(await list("type=music&format=vinyl")).toEqual([`Record ${tag}`]);
+    expect(await list("type=movie")).toEqual([`DVD ${tag}`]);
+    expect(await list("type=book")).toEqual([`Book ${tag}`]);
+  });
+
+  it("treats a UPC and its 13-digit EAN form as the same disc for duplicates", async () => {
+    const first = await create({ mediaType: "music", title: "Duplicate Disc", isbn: "724384260910" });
+    expect(first.status).toBe(201);
+    const second = await create({ mediaType: "music", title: "Duplicate Disc", isbn: "0724384260910" });
+    expect(second.status).toBe(409);
+  });
+
+  it("validates the barcode lookup's type and code", async () => {
+    const noType = await SELF.fetch("https://library.test/api/lookup/barcode/724384260910", { headers: { Cookie: cookie } });
+    expect(noType.status).toBe(400);
+    const badCode = await SELF.fetch("https://library.test/api/lookup/barcode/123?type=music", { headers: { Cookie: cookie } });
+    expect(badCode.status).toBe(400);
+  });
+});
+
 /** Creates a named wishlist and returns its id. */
 async function createWishlist(cookie: string, name: string): Promise<string> {
   const res = await SELF.fetch("https://library.test/api/wishlists", {

@@ -1,6 +1,7 @@
 # The Carmacks' Library
 
-Shared home book library for Meg and Joshua — scan-to-add via phone camera, browse/search/filter,
+Shared home library for Meg and Joshua — books, music (CDs and records), and movies (DVDs and
+Jellyfin) — scan-to-add via phone camera, browse/search/filter,
 rate & take notes, plus a desktop bulk-add mode for onboarding the existing collection with a USB
 barcode scanner. See [`specs.md`](./specs.md) for the full product spec.
 
@@ -56,6 +57,18 @@ npx wrangler secret put GOOGLE_BOOKS_API_KEY
 
 Lookups work without it (Open Library fallback covers most ISBNs), but cover art and metadata
 quality are noticeably better from Google Books when it's reachable.
+
+Movie search and DVD barcode matching use [TMDB](https://www.themoviedb.org/settings/api) (free
+account → Settings → API). Either the v3 "API Key" or the v4 "API Read Access Token" works:
+
+```bash
+npx wrangler secret put TMDB_API_KEY
+```
+
+Without it, DVD barcode scans still return the bare retail listing (title + product photo) from
+UPCitemdb, but movie title search shows "not set up yet". Music needs no key — it uses
+[MusicBrainz](https://musicbrainz.org) + [Cover Art Archive](https://coverartarchive.org), with
+UPCitemdb as a barcode fallback. UPCitemdb's free tier allows ~100 lookups/day.
 
 Once migrations are applied and the app is running (`npm run dev` or deployed), create the two
 accounts:
@@ -187,6 +200,8 @@ worker/
     index.ts       # Hono app, route mounting, auth gate, scheduled (cron) handler
     auth.ts         # PBKDF2 password hashing + D1-backed sessions
     lookup.ts        # Google Books -> Open Library ISBN/text lookup
+    media-lookup.ts  # Music (MusicBrainz) and movie (UPCitemdb -> TMDB) lookups
+    barcode.ts       # UPC/EAN normalization, checksum, retail-title cleanup
     covers.ts         # Fetch-and-cache cover images into R2
     backup.ts          # Weekly D1 -> R2 JSON backup (see "Backups" above)
     isbn.ts              # ISBN normalization + checksum validation
@@ -216,6 +231,13 @@ scripts/
   public URL with only two intended users.
 - Duplicate-ISBN handling, manual-entry fallback, and the desktop bulk-add "needs review" queue are
   all implemented per spec — see `specs.md` for the intended UX if extending them.
+- **Music and movies** share the `books` table with books (same shelf locations, ratings, tags,
+  notes, search, backups). `media_type` is `book` / `music` / `movie`; `format` is `physical` for
+  books, `cd` / `vinyl` for music, `dvd` / `jellyfin` for movies (validated per type server-side,
+  mirrored in `app/src/media.ts` — keep `MEDIA_FORMATS` in `worker/src/constants.ts` in sync). For
+  music/movies the `isbn` column holds the UPC/EAN barcode, normalized so a 12-digit UPC and its
+  13-digit EAN form count as the same disc. Jellyfin items have no shelf location. Labels, genres,
+  and status wording per type live in `app/src/media.ts`. Wishlists are still book-only.
 - Wishlist (multiple named lists, "got it" conversion into the real library) is implemented — see
   `worker/src/routes/wishlist.ts` / `wishlists.ts`. Recommendations are still out of scope.
 - Any wishlist can be made public from its "Make public" button, giving a read-only share link

@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import type { BookRecord, BookStatus, Env } from "../types";
+import type { BookRecord, BookStatus, Env, MediaType } from "../types";
 import { cacheCoverImage } from "../covers";
 import { getUserFromRequest } from "../auth";
-import { LOCATIONS } from "../constants";
+import { LOCATIONS, MEDIA_FORMATS, MEDIA_TYPES } from "../constants";
+import { normalizeBarcode } from "../barcode";
 
 const VALID_LOCATIONS = new Set<string>(LOCATIONS);
 
@@ -12,10 +13,29 @@ function shelfLocationError(shelfLocation: string | null | undefined): string | 
   return VALID_LOCATIONS.has(shelfLocation) ? null : `Shelf location must be one of: ${LOCATIONS.join(", ")}.`;
 }
 
+/** Returns an error message if format isn't allowed for this media type; null if fine. */
+function formatError(mediaType: MediaType, format: string | null | undefined): string | null {
+  if (format === undefined || format === null) return null;
+  const allowed = MEDIA_FORMATS[mediaType];
+  return allowed.includes(format) ? null : `Format for ${mediaType} must be one of: ${allowed.join(", ")}.`;
+}
+
+function isMediaType(value: unknown): value is MediaType {
+  return (MEDIA_TYPES as readonly unknown[]).includes(value);
+}
+
+/** Books keep their ISBN as typed; CD/DVD barcodes get the same UPC/EAN normalization as lookups. */
+function normalizeCode(mediaType: MediaType, code: string | null | undefined): string | null {
+  const trimmed = code?.trim();
+  if (!trimmed) return null;
+  return mediaType === "book" ? trimmed : normalizeBarcode(trimmed) || null;
+}
+
 export const bookRoutes = new Hono<{ Bindings: Env }>();
 
 export interface BookRow {
   id: string;
+  media_type: MediaType;
   isbn: string | null;
   title: string;
   authors: string | null;
@@ -29,6 +49,7 @@ export interface BookRow {
   notes: string | null;
   shelf_location: string | null;
   format: string;
+  year: number | null;
   source: string | null;
   added_by: string | null;
   created_at: string;
@@ -44,13 +65,22 @@ export function rowToBook(row: BookRow): BookRecord {
   };
 }
 
-const SORTABLE_COLUMNS = new Set(["title", "created_at", "rating", "status", "series_name", "shelf_location"]);
+const SORTABLE_COLUMNS = new Set(["title", "created_at", "rating", "status", "series_name", "shelf_location", "year"]);
 
 bookRoutes.get("/", async (c) => {
-  const { q, status, genre, tag, shelf, sort = "created_at", dir = "desc" } = c.req.query();
+  const { q, type, format, status, genre, tag, shelf, sort = "created_at", dir = "desc" } = c.req.query();
 
   const clauses: string[] = [];
   const params: unknown[] = [];
+
+  if (type) {
+    clauses.push("media_type = ?");
+    params.push(type);
+  }
+  if (format) {
+    clauses.push("format = ?");
+    params.push(format);
+  }
 
   if (q) {
     clauses.push("(title LIKE ? OR authors LIKE ? OR isbn LIKE ? OR shelf_location LIKE ?)");
@@ -92,6 +122,9 @@ bookRoutes.get("/:id", async (c) => {
 });
 
 interface CreateBookBody {
+  mediaType?: MediaType;
+  format?: string | null;
+  year?: number | null;
   isbn?: string | null;
   title: string;
   authors?: string[];
@@ -117,7 +150,15 @@ bookRoutes.post("/", async (c) => {
   const shelfError = shelfLocationError(body.shelfLocation);
   if (shelfError) return c.json({ error: shelfError }, 400);
 
-  const isbn = body.isbn?.trim() || null;
+  const mediaType = body.mediaType ?? "book";
+  if (!isMediaType(mediaType)) {
+    return c.json({ error: `Media type must be one of: ${MEDIA_TYPES.join(", ")}.` }, 400);
+  }
+  const fmtError = formatError(mediaType, body.format);
+  if (fmtError) return c.json({ error: fmtError }, 400);
+  const format = body.format ?? MEDIA_FORMATS[mediaType][0];
+
+  const isbn = normalizeCode(mediaType, body.isbn);
   if (isbn && !body.allowDuplicate) {
     const existing = await c.env.DB.prepare("SELECT id, title, cover_url FROM books WHERE isbn = ?")
       .bind(isbn)
@@ -138,11 +179,12 @@ bookRoutes.post("/", async (c) => {
   const now = new Date().toISOString();
   await c.env.DB.prepare(
     `INSERT INTO books
-      (id, isbn, title, authors, cover_url, status, rating, genres, tags, series_name, series_number, notes, shelf_location, format, source, added_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'physical', ?, ?, ?, ?)`
+      (id, media_type, isbn, title, authors, cover_url, status, rating, genres, tags, series_name, series_number, notes, shelf_location, format, year, source, added_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
+      mediaType,
       isbn,
       body.title.trim(),
       JSON.stringify(body.authors ?? []),
@@ -155,6 +197,8 @@ bookRoutes.post("/", async (c) => {
       body.seriesNumber ?? null,
       body.notes ?? null,
       body.shelfLocation ?? null,
+      format,
+      body.year ?? null,
       body.source ?? "manual",
       user?.id ?? null,
       now,
@@ -178,6 +222,8 @@ const UPDATABLE_FIELDS: Record<string, (v: unknown) => unknown> = {
   tags: (v) => JSON.stringify(v ?? []),
   notes: (v) => v ?? null,
   shelfLocation: (v) => v ?? null,
+  format: (v) => v,
+  year: (v) => v ?? null,
 };
 
 const FIELD_KEY_MAP: Record<string, string> = {
@@ -197,6 +243,13 @@ bookRoutes.patch("/:id", async (c) => {
     const shelfError = shelfLocationError(body.shelfLocation);
     if (shelfError) return c.json({ error: shelfError }, 400);
   }
+  // Media type itself isn't editable (a CD doesn't become a movie), but its format is.
+  if (body.format !== undefined) {
+    if (body.format === null) return c.json({ error: "Format can't be empty." }, 400);
+    const fmtError = formatError(existing.media_type, body.format);
+    if (fmtError) return c.json({ error: fmtError }, 400);
+  }
+  if (body.isbn !== undefined) body.isbn = normalizeCode(existing.media_type, body.isbn);
 
   const sets: string[] = [];
   const params: unknown[] = [];
