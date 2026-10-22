@@ -4,8 +4,10 @@ import type { IScannerControls } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 
 interface BarcodeScannerProps {
-  onDetected: (isbn: string) => void;
+  onDetected: (code: string) => void;
   paused?: boolean;
+  /** "isbn" for books; "product" for CD / record / DVD barcodes (UPC or EAN). */
+  kind?: "isbn" | "product";
 }
 
 /** Normalizes a decoded barcode string down to digits/X (EAN-13/ISBN-10 formats). */
@@ -16,9 +18,17 @@ function normalizeIsbn(raw: string): string {
 // Book barcodes are always EAN-13 (occasionally EAN-8 for small booklets). Restricting the
 // reader to these formats — instead of zxing's full default set — avoids stray hits on QR
 // codes or other barcode types someone might wave in front of the camera, and decodes faster.
-const HINTS = new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8]]]);
+const ISBN_HINTS = new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8]]]);
+// CDs, records, and DVDs sold in the US mostly carry UPC-A. Not enabled for books on
+// purpose: mass-market paperbacks often have a price UPC on the back alongside the ISBN.
+const PRODUCT_HINTS = new Map([
+  [
+    DecodeHintType.POSSIBLE_FORMATS,
+    [BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.EAN_13, BarcodeFormat.EAN_8],
+  ],
+]);
 
-export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerProps) {
+export function BarcodeScanner({ onDetected, paused = false, kind = "isbn" }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +39,7 @@ export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerPro
       return;
     }
 
-    const reader = new BrowserMultiFormatReader(HINTS);
+    const reader = new BrowserMultiFormatReader(kind === "isbn" ? ISBN_HINTS : PRODUCT_HINTS);
     let cancelled = false;
 
     reader
@@ -38,8 +48,8 @@ export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerPro
         videoRef.current!,
         (result) => {
           if (result && !cancelled) {
-            const isbn = normalizeIsbn(result.getText());
-            if (isbn.length >= 10) onDetected(isbn);
+            const code = normalizeIsbn(result.getText());
+            if (kind === "isbn" ? code.length >= 10 : code.length >= 8) onDetected(code);
           }
         }
       )
@@ -54,13 +64,13 @@ export function BarcodeScanner({ onDetected, paused = false }: BarcodeScannerPro
       controlsRef.current?.stop();
       controlsRef.current = null;
     };
-  }, [onDetected, paused]);
+  }, [onDetected, paused, kind]);
 
   if (error) {
     return (
       <div className="scanner-error">
         <p>Camera unavailable: {error}</p>
-        <p>You can still add books manually.</p>
+        <p>You can still add items manually.</p>
       </div>
     );
   }

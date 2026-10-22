@@ -71,6 +71,17 @@ For initial onboarding, Joshua will help Meg bulk-add her existing collection us
 - Should degrade gracefully if a lookup API is down (manual entry always available)
 - Desktop bulk-add view can be simpler/utilitarian — optimized for speed, not aesthetics
 
+## Music & Movies (added after Phase 1)
+Requested by Meg: track music and movies alongside books, with the same schema and location tracking.
+- **Music:** CD or Record. Artist(s), year, genres, tags, rating, notes, shelf location. Lookup by barcode or
+  title/artist search via MusicBrainz + Cover Art Archive.
+- **Movies:** DVD or Jellyfin (digital). Director(s), year, collection, genres, tags, rating, notes. DVDs have a
+  shelf location; Jellyfin items don't. DVD barcode → UPCitemdb → TMDB match; title search via TMDB.
+  Jellyfin movies are added by hand (no server import).
+- Library has a Books / Music / Movies switch; scan, manual add, and bulk add all work for each type.
+- Statuses reuse To Read / Reading / Read, shown as To Listen / Listening / Listened and To Watch / Watching / Watched.
+- Wishlists stay book-only for now.
+
 ## Phase 2 (future, not in this spec)
 - Recommendations engine
 - Shopping list / wishlist for books she wants but doesn't own yet (distinct from "To Read," which implies ownership)

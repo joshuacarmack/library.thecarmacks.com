@@ -4,28 +4,30 @@ import { api, type Book } from "../api";
 import { BookCard } from "../components/BookCard";
 import { useAuth } from "../auth-context";
 import { LOCATIONS } from "../constants";
+import { MEDIA, type Status } from "../media";
+import { MediaTypePicker } from "../components/MediaTypePicker";
+import { useMediaType } from "../hooks/useMediaType";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "to_read", label: "To Read" },
-  { value: "reading", label: "Reading" },
-  { value: "read", label: "Read" },
-];
+const STATUSES: Status[] = ["to_read", "reading", "read"];
 
 const SORT_OPTIONS = [
   { value: "created_at", label: "Date added" },
   { value: "title", label: "Title" },
   { value: "rating", label: "Rating" },
   { value: "status", label: "Status" },
+  { value: "year", label: "Year" },
 ];
 
 export function LibraryPage() {
   const { logout, user } = useAuth();
+  const [mediaType, setMediaType] = useMediaType();
+  const media = MEDIA[mediaType];
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [shelf, setShelf] = useState("");
+  const [format, setFormat] = useState("");
   const [sort, setSort] = useState("created_at");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
 
@@ -33,7 +35,7 @@ export function LibraryPage() {
     let cancelled = false;
     setLoading(true);
     api
-      .listBooks({ q, status, shelf, sort, dir })
+      .listBooks({ type: mediaType, format, q, status, shelf, sort, dir })
       .then((res) => {
         if (!cancelled) setBooks(res.books);
       })
@@ -43,7 +45,10 @@ export function LibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [q, status, shelf, sort, dir]);
+  }, [mediaType, format, q, status, shelf, sort, dir]);
+
+  // Formats differ per media type, so a CD filter makes no sense on the Movies tab.
+  useEffect(() => setFormat(""), [mediaType]);
 
   const allTags = useMemo(() => [...new Set(books.flatMap((b) => b.tags))].sort(), [books]);
 
@@ -53,7 +58,7 @@ export function LibraryPage() {
         <div>
           <h1>Library</h1>
           <p className="library-header__subtitle">
-            {books.length} book{books.length === 1 ? "" : "s"}
+            {books.length} {books.length === 1 ? media.noun : media.nounPlural}
             {user?.displayName ? ` · signed in as ${user.displayName}` : ""}
           </p>
         </div>
@@ -62,22 +67,35 @@ export function LibraryPage() {
         </button>
       </header>
 
+      <MediaTypePicker value={mediaType} onChange={setMediaType} />
+
       <div className="library-controls">
         <input
           className="library-search"
           type="search"
-          placeholder="Search title, author, ISBN…"
+          placeholder={`Search title, ${media.creatorLabel.replace("(s)", "").toLowerCase()}, ${media.codeLabel === "ISBN" ? "ISBN" : "barcode"}…`}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <div className="library-filters">
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            <option value="">All statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {media.statusLabels[s]}
               </option>
             ))}
           </select>
+          {media.formats.length > 1 && (
+            <select value={format} onChange={(e) => setFormat(e.target.value)}>
+              <option value="">All formats</option>
+              {media.formats.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          )}
           <select value={shelf} onChange={(e) => setShelf(e.target.value)}>
             <option value="">All locations</option>
             {LOCATIONS.map((loc) => (
@@ -116,9 +134,9 @@ export function LibraryPage() {
         <p className="centered-loading">Loading…</p>
       ) : books.length === 0 ? (
         <div className="empty-state">
-          <p>No books yet.</p>
-          <Link to="/add/scan" className="btn btn--primary">
-            Scan your first book
+          <p>No {media.nounPlural} yet.</p>
+          <Link to={`/add/scan?type=${mediaType}`} className="btn btn--primary">
+            Scan your first {media.noun}
           </Link>
         </div>
       ) : (

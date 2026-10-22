@@ -5,12 +5,13 @@ import initSchema from "../migrations/0001_init.sql?raw";
 import wishlistSchema from "../migrations/0002_wishlist.sql?raw";
 import wishlistListsSchema from "../migrations/0003_wishlist_lists.sql?raw";
 import wishlistSharingSchema from "../migrations/0004_wishlist_sharing.sql?raw";
+import mediaTypesSchema from "../migrations/0005_media_types.sql?raw";
 
 // D1's local binding starts empty for every test run. `env.DB.exec()` expects one
 // statement per line (it doesn't understand multi-line statements or semicolons), so
 // split on `;` ourselves and run each statement individually instead.
 // New migrations must be added to this list explicitly — it's not auto-discovered.
-const migrations = [initSchema, wishlistSchema, wishlistListsSchema, wishlistSharingSchema];
+const migrations = [initSchema, wishlistSchema, wishlistListsSchema, wishlistSharingSchema, mediaTypesSchema];
 
 for (const schema of migrations) {
   const statements = schema

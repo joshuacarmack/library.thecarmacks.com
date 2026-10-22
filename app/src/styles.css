@@ -803,3 +803,30 @@ legend {
 .bulk-empty {
   color: var(--color-muted);
 }
+
+/* Books / Music / Movies switch */
+.media-picker {
+  margin-bottom: 12px;
+}
+.media-picker .status-toggle__btn {
+  white-space: nowrap;
+}
+
+/* Album art is square: show it whole inside the book-shaped tile instead of cropping it. */
+.book-card__cover--square img,
+.book-detail__cover--square img {
+  object-fit: contain;
+}
+.book-detail__cover--square {
+  aspect-ratio: 1 / 1;
+}
+.confirm-cover--square {
+  max-height: 220px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.status-pill--format {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: #8a5a28;
+}
